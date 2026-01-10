@@ -15,12 +15,10 @@ struct ContentView: View {
                 .foregroundStyle(.tint)
             Text("Hello, world!")
 
-            Spacer()
-
             Text("Developed by Yiguo27")
-                .font(.footnote)
-                .foregroundColor(.secondary)
-                .padding(.bottom, 20)
+                .font(.headline)
+                .foregroundColor(.blue)
+                .padding(.top, 30)
         }
         .padding()
     }
