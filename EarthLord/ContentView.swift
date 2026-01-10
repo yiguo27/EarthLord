@@ -17,7 +17,7 @@ struct ContentView: View {
 
             Spacer()
 
-            Text("Developed by Claude")
+            Text("Developed by Yiguo27")
                 .font(.footnote)
                 .foregroundColor(.secondary)
                 .padding(.bottom, 20)
