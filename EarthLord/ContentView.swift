@@ -14,6 +14,13 @@ struct ContentView: View {
                 .imageScale(.large)
                 .foregroundStyle(.tint)
             Text("Hello, world!")
+
+            Spacer()
+
+            Text("Developed by Claude")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+                .padding(.bottom, 20)
         }
         .padding()
     }
