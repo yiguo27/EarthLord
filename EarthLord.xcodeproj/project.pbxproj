@@ -6,12 +6,16 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		5D85BB242F164AF6009C53FD /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 5D85BB232F164AF6009C53FD /* Supabase */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
-		5D803A412F11F94D00022525 /* EarthLord.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EarthLord.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5D85BABE2F1635A0009C53FD /* EarthLord.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EarthLord.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		5D803A432F11F94D00022525 /* EarthLord */ = {
+		5D85BABF2F1635A0009C53FD /* EarthLord */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = EarthLord;
 			sourceTree = "<group>";
@@ -19,10 +23,11 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		5D803A3E2F11F94D00022525 /* Frameworks */ = {
+		5D85BABB2F1635A0009C53FD /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5D85BB242F164AF6009C53FD /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -32,7 +37,8 @@
 		5D803A382F11F94D00022525 = {
 			isa = PBXGroup;
 			children = (
-				5D803A432F11F94D00022525 /* EarthLord */,
+				5D85BABF2F1635A0009C53FD /* EarthLord */,
+				5D85BB222F164AF6009C53FD /* Frameworks */,
 				5D803A422F11F94D00022525 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -40,34 +46,42 @@
 		5D803A422F11F94D00022525 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				5D803A412F11F94D00022525 /* EarthLord.app */,
+				5D85BABE2F1635A0009C53FD /* EarthLord.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		5D85BB222F164AF6009C53FD /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		5D803A402F11F94D00022525 /* EarthLord */ = {
+		5D85BABD2F1635A0009C53FD /* EarthLord */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 5D803A4C2F11F94D00022525 /* Build configuration list for PBXNativeTarget "EarthLord" */;
+			buildConfigurationList = 5D85BAC82F1635A1009C53FD /* Build configuration list for PBXNativeTarget "EarthLord" */;
 			buildPhases = (
-				5D803A3D2F11F94D00022525 /* Sources */,
-				5D803A3E2F11F94D00022525 /* Frameworks */,
-				5D803A3F2F11F94D00022525 /* Resources */,
+				5D85BABA2F1635A0009C53FD /* Sources */,
+				5D85BABB2F1635A0009C53FD /* Frameworks */,
+				5D85BABC2F1635A0009C53FD /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				5D803A432F11F94D00022525 /* EarthLord */,
+				5D85BABF2F1635A0009C53FD /* EarthLord */,
 			);
 			name = EarthLord;
 			packageProductDependencies = (
+				5D85BB232F164AF6009C53FD /* Supabase */,
 			);
 			productName = EarthLord;
-			productReference = 5D803A412F11F94D00022525 /* EarthLord.app */;
+			productReference = 5D85BABE2F1635A0009C53FD /* EarthLord.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -80,7 +94,7 @@
 				LastSwiftUpdateCheck = 2610;
 				LastUpgradeCheck = 2610;
 				TargetAttributes = {
-					5D803A402F11F94D00022525 = {
+					5D85BABD2F1635A0009C53FD = {
 						CreatedOnToolsVersion = 26.1.1;
 					};
 				};
@@ -94,18 +108,21 @@
 			);
 			mainGroup = 5D803A382F11F94D00022525;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				5D5FC3A52F138B57005DF1D2 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5D803A422F11F94D00022525 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				5D803A402F11F94D00022525 /* EarthLord */,
+				5D85BABD2F1635A0009C53FD /* EarthLord */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		5D803A3F2F11F94D00022525 /* Resources */ = {
+		5D85BABC2F1635A0009C53FD /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -115,7 +132,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		5D803A3D2F11F94D00022525 /* Sources */ = {
+		5D85BABA2F1635A0009C53FD /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -244,13 +261,14 @@
 			};
 			name = Release;
 		};
-		5D803A4D2F11F94D00022525 /* Debug */ = {
+		5D85BAC62F1635A1009C53FD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3LVQYZFPS3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -258,6 +276,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -275,13 +294,14 @@
 			};
 			name = Debug;
 		};
-		5D803A4E2F11F94D00022525 /* Release */ = {
+		5D85BAC72F1635A1009C53FD /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3LVQYZFPS3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -289,6 +309,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -318,16 +339,35 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		5D803A4C2F11F94D00022525 /* Build configuration list for PBXNativeTarget "EarthLord" */ = {
+		5D85BAC82F1635A1009C53FD /* Build configuration list for PBXNativeTarget "EarthLord" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				5D803A4D2F11F94D00022525 /* Debug */,
-				5D803A4E2F11F94D00022525 /* Release */,
+				5D85BAC62F1635A1009C53FD /* Debug */,
+				5D85BAC72F1635A1009C53FD /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		5D5FC3A52F138B57005DF1D2 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5D85BB232F164AF6009C53FD /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5D5FC3A52F138B57005DF1D2 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 5D803A392F11F94D00022525 /* Project object */;
 }
