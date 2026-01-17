@@ -361,8 +361,11 @@ struct AuthView: View {
             AuthButton(title: "发送验证码", isLoading: authManager.isLoading) {
                 Task {
                     await authManager.sendRegisterOTP(email: registerEmail)
+                    // 🔧 发送成功后立即启动计时器（不依赖 if 检查，因为 UI 可能已切换）
                     if authManager.otpSent {
-                        startResendCountdown()
+                        await MainActor.run {
+                            startResendCountdown()
+                        }
                     }
                 }
             }
@@ -376,7 +379,7 @@ struct AuthView: View {
             // 步骤指示
             StepIndicator(currentStep: 2, totalSteps: 3)
 
-            Text("验证码已发送至 \(registerEmail)")
+            Text("验证码已发送至 \(authManager.pendingEmail.isEmpty ? registerEmail : authManager.pendingEmail)")
                 .font(.system(size: 14))
                 .foregroundColor(ApocalypseTheme.textSecondary)
                 .multilineTextAlignment(.center)
@@ -423,10 +426,17 @@ struct AuthView: View {
             Button(action: {
                 authManager.resetOTPState()
                 registerCode = ""
+                resendCountdown = 0  // 🔧 重置计时器
             }) {
                 Text("返回上一步")
                     .font(.system(size: 14))
                     .foregroundColor(ApocalypseTheme.textSecondary)
+            }
+        }
+        .onAppear {
+            // 🔧 修复：第一次进入时确保计时器启动
+            if resendCountdown == 0 {
+                startResendCountdown()
             }
         }
     }
