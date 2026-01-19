@@ -281,6 +281,74 @@ final class AuthManager: ObservableObject {
         resetState()
     }
 
+    // MARK: - 删除账户
+
+    func deleteAccount() async -> Bool {
+        print("🗑️ AuthManager: 开始删除账户流程")
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            // 获取当前会话的访问令牌
+            print("🗑️ AuthManager: 正在获取用户会话...")
+            let session = try await supabase.auth.session
+            let accessToken = session.accessToken
+            print("🗑️ AuthManager: 成功获取访问令牌")
+
+            // 调用边缘函数删除账户
+            guard let url = URL(string: "https://hrtdgvplerzybnodjqmk.supabase.co/functions/v1/delete-account") else {
+                print("🗑️ AuthManager: 错误 - 无效的请求地址")
+                errorMessage = "无效的请求地址"
+                isLoading = false
+                return false
+            }
+
+            print("🗑️ AuthManager: 正在调用删除账户边缘函数...")
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            // 添加 Supabase anon key 用于通过边缘函数的 JWT 验证
+            request.setValue("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhydGRndnBsZXJ6eWJub2RqcW1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5MzU1NjksImV4cCI6MjA4MzUxMTU2OX0.Zgof7wvEDEHJUOxgJO3g3Aur-4XX9TcQGkVvRhPQ1Mk", forHTTPHeaderField: "apikey")
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("🗑️ AuthManager: 错误 - 无效的服务器响应")
+                errorMessage = "无效的服务器响应"
+                isLoading = false
+                return false
+            }
+
+            print("🗑️ AuthManager: 服务器响应状态码: \(httpResponse.statusCode)")
+
+            if httpResponse.statusCode == 200 {
+                print("🗑️ AuthManager: ✅ 账户删除成功，正在清理本地状态...")
+                resetState()
+                isLoading = false
+                print("🗑️ AuthManager: ✅ 删除流程完成")
+                return true
+            } else {
+                // 解析错误信息
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let error = json["error"] as? String {
+                    print("🗑️ AuthManager: ❌ 服务器返回错误: \(error)")
+                    errorMessage = error
+                } else {
+                    print("🗑️ AuthManager: ❌ 删除失败，状态码: \(httpResponse.statusCode)")
+                    errorMessage = "删除账户失败，请稍后重试"
+                }
+                isLoading = false
+                return false
+            }
+        } catch {
+            print("🗑️ AuthManager: ❌ 删除账户异常: \(error.localizedDescription)")
+            errorMessage = "删除账户失败: \(error.localizedDescription)"
+            isLoading = false
+            return false
+        }
+    }
+
     private func resetState() {
         _internalAuthFlag = false
         needsPasswordSetup = false
