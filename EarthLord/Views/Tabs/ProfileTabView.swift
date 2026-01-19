@@ -10,12 +10,14 @@ import Supabase
 
 struct ProfileTabView: View {
     @ObservedObject private var authManager = AuthManager.shared
+    @ObservedObject private var languageManager = LanguageManager.shared
     @State private var showLogoutConfirm = false
     @State private var showDeleteAccountSheet = false
     @State private var deleteConfirmText = ""
     @State private var showDeleteAccountAlert = false
     @State private var deleteAccountMessage = ""
     @State private var isDeleting = false
+    @State private var showLanguagePicker = false
 
     var body: some View {
         ZStack {
@@ -47,24 +49,93 @@ struct ProfileTabView: View {
                 .padding(.top, 50)
             }
         }
-        .confirmationDialog("确定要退出登录吗？", isPresented: $showLogoutConfirm) {
-            Button("退出登录", role: .destructive) {
+        .confirmationDialog(languageManager.localizedString("确定要退出登录吗？"), isPresented: $showLogoutConfirm) {
+            Button(languageManager.localizedString("退出登录"), role: .destructive) {
                 Task {
                     await authManager.signOut()
                 }
             }
-            Button("取消", role: .cancel) {}
+            Button(languageManager.localizedString("取消"), role: .cancel) {}
         } message: {
-            Text("退出后需要重新登录")
+            Text(languageManager.localizedString("退出后需要重新登录"))
         }
         .sheet(isPresented: $showDeleteAccountSheet) {
             deleteAccountConfirmSheet
         }
-        .alert("提示", isPresented: $showDeleteAccountAlert) {
-            Button("确定", role: .cancel) {}
+        .alert(languageManager.localizedString("提示"), isPresented: $showDeleteAccountAlert) {
+            Button(languageManager.localizedString("确定"), role: .cancel) {}
         } message: {
             Text(deleteAccountMessage)
         }
+        .sheet(isPresented: $showLanguagePicker) {
+            languagePickerSheet
+        }
+    }
+
+    // MARK: - 语言选择弹窗
+    private var languagePickerSheet: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                ForEach(AppLanguage.allCases, id: \.rawValue) { language in
+                    Button(action: {
+                        languageManager.setLanguage(language)
+                        showLanguagePicker = false
+                    }) {
+                        HStack(spacing: 16) {
+                            // 图标
+                            ZStack {
+                                Circle()
+                                    .fill(ApocalypseTheme.primary.opacity(0.15))
+                                    .frame(width: 40, height: 40)
+
+                                Image(systemName: language.icon)
+                                    .font(.system(size: 18))
+                                    .foregroundColor(ApocalypseTheme.primary)
+                            }
+
+                            // 语言名称
+                            Text(language.displayName)
+                                .font(.system(size: 16))
+                                .foregroundColor(ApocalypseTheme.textPrimary)
+
+                            Spacer()
+
+                            // 选中标记
+                            if languageManager.currentLanguage == language {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(ApocalypseTheme.primary)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 16)
+                    }
+
+                    if language != AppLanguage.allCases.last {
+                        Divider()
+                            .padding(.leading, 76)
+                    }
+                }
+            }
+            .background(ApocalypseTheme.cardBackground)
+            .cornerRadius(16)
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(ApocalypseTheme.background)
+            .navigationTitle(languageManager.localizedString("语言"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(languageManager.localizedString("取消")) {
+                        showLanguagePicker = false
+                    }
+                    .foregroundColor(ApocalypseTheme.primary)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
     }
 
     // MARK: - 删除账户按钮
@@ -78,7 +149,7 @@ struct ProfileTabView: View {
                 Image(systemName: "trash.fill")
                     .font(.system(size: 16))
 
-                Text("删除账户")
+                Text(languageManager.localizedString("删除账户"))
                     .font(.system(size: 16, weight: .semibold))
             }
             .foregroundColor(ApocalypseTheme.textMuted)
@@ -107,19 +178,19 @@ struct ProfileTabView: View {
 
                 // 警告文字
                 VStack(spacing: 12) {
-                    Text("删除账户")
+                    Text(languageManager.localizedString("删除账户"))
                         .font(.system(size: 22, weight: .bold))
                         .foregroundColor(ApocalypseTheme.textPrimary)
 
-                    Text("此操作不可撤销！\n您的所有数据将被永久删除，包括：")
+                    Text(languageManager.localizedString("此操作不可撤销！\n您的所有数据将被永久删除，包括："))
                         .font(.system(size: 15))
                         .foregroundColor(ApocalypseTheme.textSecondary)
                         .multilineTextAlignment(.center)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Label("个人资料", systemImage: "person.fill")
-                        Label("领地数据", systemImage: "flag.fill")
-                        Label("游戏进度", systemImage: "gamecontroller.fill")
+                        Label(languageManager.localizedString("个人资料"), systemImage: "person.fill")
+                        Label(languageManager.localizedString("领地数据"), systemImage: "flag.fill")
+                        Label(languageManager.localizedString("游戏进度"), systemImage: "gamecontroller.fill")
                     }
                     .font(.system(size: 14))
                     .foregroundColor(ApocalypseTheme.textMuted)
@@ -127,7 +198,7 @@ struct ProfileTabView: View {
 
                 // 输入确认
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("请输入 DELETE 以确认操作")
+                    Text(languageManager.localizedString("请输入 DELETE 以确认操作"))
                         .font(.system(size: 14))
                         .foregroundColor(ApocalypseTheme.textSecondary)
 
@@ -159,7 +230,7 @@ struct ProfileTabView: View {
                                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                     .scaleEffect(0.8)
                             }
-                            Text(isDeleting ? "删除中..." : "确认删除")
+                            Text(isDeleting ? languageManager.localizedString("删除中...") : languageManager.localizedString("确认删除"))
                                 .font(.system(size: 16, weight: .semibold))
                         }
                         .foregroundColor(.white)
@@ -174,7 +245,7 @@ struct ProfileTabView: View {
                         print("🗑️ ProfileTabView: 用户取消删除账户")
                         showDeleteAccountSheet = false
                     }) {
-                        Text("取消")
+                        Text(languageManager.localizedString("取消"))
                             .font(.system(size: 16, weight: .medium))
                             .foregroundColor(ApocalypseTheme.textSecondary)
                             .frame(maxWidth: .infinity)
@@ -227,7 +298,7 @@ struct ProfileTabView: View {
                     .font(.system(size: 16))
                     .foregroundColor(ApocalypseTheme.primary)
 
-                Text("幸存者档案")
+                Text(languageManager.localizedString("幸存者档案"))
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(ApocalypseTheme.textPrimary)
 
@@ -259,7 +330,7 @@ struct ProfileTabView: View {
 
                 // 信息
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(authManager.currentUser?.email ?? "未登录")
+                    Text(authManager.currentUser?.email ?? languageManager.localizedString("未登录"))
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(ApocalypseTheme.textPrimary)
                         .lineLimit(1)
@@ -276,7 +347,7 @@ struct ProfileTabView: View {
                             .font(.system(size: 12))
                             .foregroundColor(ApocalypseTheme.warning)
 
-                        Text("Lv.1 新手幸存者")
+                        Text(languageManager.localizedString("Lv.1 新手幸存者"))
                             .font(.system(size: 13))
                             .foregroundColor(ApocalypseTheme.textSecondary)
                     }
@@ -299,7 +370,7 @@ struct ProfileTabView: View {
                     .font(.system(size: 12))
                     .foregroundColor(ApocalypseTheme.primary)
 
-                Text("生存数据")
+                Text(languageManager.localizedString("生存数据"))
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(ApocalypseTheme.textPrimary)
 
@@ -311,14 +382,14 @@ struct ProfileTabView: View {
                 HStack(spacing: 6) {
                     StatItem(
                         icon: "flag.fill",
-                        title: "领地",
+                        title: languageManager.localizedString("领地"),
                         value: "0",
                         color: ApocalypseTheme.primary
                     )
 
                     StatItem(
                         icon: "mappin.circle.fill",
-                        title: "资源点",
+                        title: languageManager.localizedString("资源点"),
                         value: "0",
                         color: .orange
                     )
@@ -327,14 +398,14 @@ struct ProfileTabView: View {
                 HStack(spacing: 6) {
                     StatItem(
                         icon: "location.fill",
-                        title: "探索距离",
+                        title: languageManager.localizedString("探索距离"),
                         value: "0 km",
                         color: .green
                     )
 
                     StatItem(
                         icon: "clock.fill",
-                        title: "生存天数",
+                        title: languageManager.localizedString("生存天数"),
                         value: "1",
                         color: .blue
                     )
@@ -349,10 +420,23 @@ struct ProfileTabView: View {
     // MARK: - 功能列表
     private var functionsCard: some View {
         VStack(spacing: 0) {
+            // 语言设置
+            ProfileFunctionRowWithValue(
+                icon: "globe",
+                title: languageManager.localizedString("语言"),
+                value: languageManager.currentLanguage.displayName,
+                iconColor: ApocalypseTheme.primary
+            ) {
+                showLanguagePicker = true
+            }
+
+            Divider()
+                .padding(.leading, 56)
+
             ProfileFunctionRow(
                 icon: "gearshape.fill",
-                title: "设置",
-                iconColor: ApocalypseTheme.primary
+                title: languageManager.localizedString("设置"),
+                iconColor: .gray
             ) {
                 // TODO: 跳转到设置页面
             }
@@ -362,7 +446,7 @@ struct ProfileTabView: View {
 
             ProfileFunctionRow(
                 icon: "bell.badge.fill",
-                title: "通知",
+                title: languageManager.localizedString("通知"),
                 iconColor: .orange
             ) {
                 // TODO: 跳转到通知页面
@@ -373,7 +457,7 @@ struct ProfileTabView: View {
 
             ProfileFunctionRow(
                 icon: "questionmark.circle.fill",
-                title: "帮助",
+                title: languageManager.localizedString("帮助"),
                 iconColor: .blue
             ) {
                 // TODO: 跳转到帮助页面
@@ -384,7 +468,7 @@ struct ProfileTabView: View {
 
             ProfileFunctionRow(
                 icon: "info.circle.fill",
-                title: "关于",
+                title: languageManager.localizedString("关于"),
                 iconColor: .gray
             ) {
                 // TODO: 跳转到关于页面
@@ -403,7 +487,7 @@ struct ProfileTabView: View {
                 Image(systemName: "rectangle.portrait.and.arrow.right")
                     .font(.system(size: 16))
 
-                Text("退出登录")
+                Text(languageManager.localizedString("退出登录"))
                     .font(.system(size: 16, weight: .semibold))
             }
             .foregroundColor(ApocalypseTheme.danger)
@@ -483,6 +567,51 @@ private struct ProfileFunctionRow: View {
                     .foregroundColor(ApocalypseTheme.textPrimary)
 
                 Spacer()
+
+                // 箭头
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14))
+                    .foregroundColor(ApocalypseTheme.textMuted)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 16)
+        }
+    }
+}
+
+// MARK: - 带值的功能行组件
+private struct ProfileFunctionRowWithValue: View {
+    let icon: String
+    let title: String
+    let value: String
+    let iconColor: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                // 图标
+                ZStack {
+                    Circle()
+                        .fill(iconColor.opacity(0.15))
+                        .frame(width: 40, height: 40)
+
+                    Image(systemName: icon)
+                        .font(.system(size: 18))
+                        .foregroundColor(iconColor)
+                }
+
+                // 标题
+                Text(title)
+                    .font(.system(size: 16))
+                    .foregroundColor(ApocalypseTheme.textPrimary)
+
+                Spacer()
+
+                // 当前值
+                Text(value)
+                    .font(.system(size: 14))
+                    .foregroundColor(ApocalypseTheme.textSecondary)
 
                 // 箭头
                 Image(systemName: "chevron.right")

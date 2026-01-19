@@ -10,8 +10,8 @@ import SwiftUI
 /// 通用占位视图
 struct PlaceholderView: View {
     let icon: String
-    let title: LocalizedStringKey
-    let subtitle: LocalizedStringKey
+    let title: String
+    let subtitle: String
 
     var body: some View {
         ZStack {

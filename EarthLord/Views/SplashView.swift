@@ -9,11 +9,13 @@ import SwiftUI
 
 /// 启动页视图
 struct SplashView: View {
+    @ObservedObject private var languageManager = LanguageManager.shared
+
     /// 是否显示加载动画
     @State private var isAnimating = false
 
     /// 加载进度文字
-    @State private var loadingText = "正在初始化..."
+    @State private var loadingText = ""
 
     /// Logo 缩放动画
     @State private var logoScale: CGFloat = 0.8
@@ -88,7 +90,7 @@ struct SplashView: View {
 
                 // 标题
                 VStack(spacing: 8) {
-                    Text("地球新主")
+                    Text(languageManager.localizedString("地球新主"))
                         .font(.system(size: 36, weight: .bold))
                         .foregroundColor(ApocalypseTheme.textPrimary)
 
@@ -128,6 +130,7 @@ struct SplashView: View {
             }
         }
         .onAppear {
+            loadingText = languageManager.localizedString("正在初始化...")
             startAnimations()
             simulateLoading()
         }
@@ -153,11 +156,11 @@ struct SplashView: View {
     private func simulateLoading() {
         // 模拟加载过程
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            loadingText = "正在加载资源..."
+            loadingText = languageManager.localizedString("正在加载资源...")
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            loadingText = "准备就绪"
+            loadingText = languageManager.localizedString("准备就绪")
         }
 
         // 完成加载，进入主界面

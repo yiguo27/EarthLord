@@ -108,7 +108,7 @@ struct RootView: View {
                     .progressViewStyle(CircularProgressViewStyle(tint: ApocalypseTheme.primary))
                     .scaleEffect(1.2)
 
-                Text("正在检查登录状态...")
+                Text("正在检查登录状态...".localized)
                     .font(.system(size: 14))
                     .foregroundColor(ApocalypseTheme.textSecondary)
             }
