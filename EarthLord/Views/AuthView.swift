@@ -115,17 +115,17 @@ struct AuthView: View {
         .sheet(isPresented: $showForgotPassword) {
             forgotPasswordSheet
         }
-        .onChange(of: authManager.errorMessage) { _, newValue in
+        .onChange(of: authManager.errorMessage) { newValue in
             if let error = newValue {
                 showToast(error)
                 authManager.clearError()
             }
         }
-        .onChange(of: selectedTab) { oldValue, newValue in
-            print("📱 AuthView: selectedTab 变化: \(oldValue) -> \(newValue), effectiveTab = \(effectiveTab)")
+        .onChange(of: selectedTab) { newValue in
+            print("📱 AuthView: selectedTab 变化: \(newValue), effectiveTab = \(effectiveTab)")
         }
-        .onChange(of: effectiveTab) { oldValue, newValue in
-            print("📱 AuthView: effectiveTab 变化: \(oldValue) -> \(newValue)")
+        .onChange(of: effectiveTab) { newValue in
+            print("📱 AuthView: effectiveTab 变化: \(newValue)")
         }
         .onAppear {
             print("📱 AuthView: 页面出现")
@@ -328,14 +328,14 @@ struct AuthView: View {
             }
         }
         .padding(.horizontal, 24)
-        .onChange(of: authManager.otpVerified) { oldValue, newValue in
-            print("📱 UI: otpVerified 变化: \(oldValue) -> \(newValue)")
+        .onChange(of: authManager.otpVerified) { newValue in
+            print("📱 UI: otpVerified 变化: \(newValue)")
         }
-        .onChange(of: authManager.needsPasswordSetup) { oldValue, newValue in
-            print("📱 UI: needsPasswordSetup 变化: \(oldValue) -> \(newValue)")
+        .onChange(of: authManager.needsPasswordSetup) { newValue in
+            print("📱 UI: needsPasswordSetup 变化: \(newValue)")
         }
-        .onChange(of: authManager.isAuthenticated) { oldValue, newValue in
-            print("📱 UI: isAuthenticated 变化: \(oldValue) -> \(newValue)")
+        .onChange(of: authManager.isAuthenticated) { newValue in
+            print("📱 UI: isAuthenticated 变化: \(newValue)")
         }
     }
 

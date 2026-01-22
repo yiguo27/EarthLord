@@ -21,6 +21,9 @@ struct RootView: View {
     /// 🔧 Auth视图的稳定标识，防止重新创建
     @State private var authViewID = UUID()
 
+    /// 🔧 用于追踪认证状态变化（兼容 iOS 16）
+    @State private var previousAuthState = false
+
     var body: some View {
         ZStack {
             if !splashFinished {
@@ -64,7 +67,7 @@ struct RootView: View {
         .animation(.easeInOut(duration: 0.3), value: sessionChecked)
         .animation(.easeInOut(duration: 0.3), value: authManager.isAuthenticated)
         .animation(.easeInOut(duration: 0.3), value: authManager.needsPasswordSetup)  // 🔧 也监听密码设置需求
-        .onChange(of: splashFinished) { _, finished in
+        .onChange(of: splashFinished) { finished in
             if finished {
                 print("🖥️ RootView: 启动页完成，开始检查会话")
                 // 启动页完成后检查会话
@@ -74,17 +77,18 @@ struct RootView: View {
                 }
             }
         }
-        .onChange(of: authManager.isAuthenticated) { oldValue, newValue in
-            print("🖥️ RootView: isAuthenticated 变化: \(oldValue) -> \(newValue)")
+        .onChange(of: authManager.isAuthenticated) { newValue in
+            print("🖥️ RootView: isAuthenticated 变化: \(previousAuthState) -> \(newValue)")
 
             // 🔧 当认证状态从 true 变为 false（登出），重新生成 AuthView ID
-            if oldValue == true && newValue == false {
+            if previousAuthState == true && newValue == false {
                 authViewID = UUID()
                 print("   → 重新生成 authViewID: \(authViewID)")
             }
+            previousAuthState = newValue
         }
-        .onChange(of: authManager.needsPasswordSetup) { oldValue, newValue in
-            print("🖥️ RootView: needsPasswordSetup 变化: \(oldValue) -> \(newValue)")
+        .onChange(of: authManager.needsPasswordSetup) { newValue in
+            print("🖥️ RootView: needsPasswordSetup 变化: \(newValue)")
         }
     }
 

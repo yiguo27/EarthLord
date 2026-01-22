@@ -206,7 +206,7 @@ struct ProfileTabView: View {
                         .textFieldStyle(.roundedBorder)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
-                        .onChange(of: deleteConfirmText) { _, newValue in
+                        .onChange(of: deleteConfirmText) { newValue in
                             print("🗑️ ProfileTabView: 输入内容 = '\(newValue)', 长度 = \(newValue.count)")
                         }
                 }

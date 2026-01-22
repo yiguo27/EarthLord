@@ -3,6 +3,7 @@
 //  EarthLord
 //
 //  MKMapView的SwiftUI包装器 - 将UIKit的地图组件桥接到SwiftUI
+//  支持末世滤镜、路径追踪轨迹渲染
 //
 
 import SwiftUI
@@ -11,7 +12,7 @@ import MapKit
 // MARK: - MapViewRepresentable
 
 /// 地图视图包装器
-/// 功能：显示苹果地图、应用末世滤镜、处理用户位置更新、自动居中
+/// 功能：显示苹果地图、应用末世滤镜、处理用户位置更新、自动居中、轨迹渲染
 struct MapViewRepresentable: UIViewRepresentable {
 
     // MARK: - Binding Properties
@@ -21,6 +22,17 @@ struct MapViewRepresentable: UIViewRepresentable {
 
     /// 是否已完成首次定位（防止重复居中）
     @Binding var hasLocatedUser: Bool
+
+    /// 追踪路径坐标数组（WGS-84 坐标）
+    @Binding var trackingPath: [CLLocationCoordinate2D]
+
+    // MARK: - Properties
+
+    /// 路径更新版本号（用于触发轨迹更新）
+    var pathUpdateVersion: Int
+
+    /// 是否正在追踪
+    var isTracking: Bool
 
     // MARK: - UIViewRepresentable Methods
 
@@ -46,7 +58,7 @@ struct MapViewRepresentable: UIViewRepresentable {
         mapView.isPitchEnabled = false  // 禁用3D倾斜
         mapView.isRotateEnabled = true
 
-        // ⭐ 关键：设置代理，用于处理位置更新
+        // ⭐ 关键：设置代理，用于处理位置更新和轨迹渲染
         mapView.delegate = context.coordinator
 
         // 应用末世滤镜效果
@@ -55,9 +67,13 @@ struct MapViewRepresentable: UIViewRepresentable {
         return mapView
     }
 
-    /// 更新地图视图（本实现中不需要更新）
+    /// 更新地图视图
     func updateUIView(_ uiView: MKMapView, context: Context) {
-        // 空实现：所有更新都在Coordinator的delegate方法中处理
+        // ⭐ 关键：检测路径更新版本变化，更新轨迹显示
+        if context.coordinator.lastPathVersion != pathUpdateVersion {
+            context.coordinator.lastPathVersion = pathUpdateVersion
+            updateTrackingPath(on: uiView)
+        }
     }
 
     /// 创建协调器（处理地图代理回调）
@@ -85,10 +101,32 @@ struct MapViewRepresentable: UIViewRepresentable {
         }
     }
 
+    /// 更新追踪路径显示
+    /// - Parameter mapView: 地图视图
+    private func updateTrackingPath(on mapView: MKMapView) {
+        // 移除旧的轨迹覆盖物
+        let existingOverlays = mapView.overlays.filter { $0 is MKPolyline }
+        mapView.removeOverlays(existingOverlays)
+
+        // 如果路径点少于 2 个，无法绘制线段
+        guard trackingPath.count >= 2 else { return }
+
+        // ⭐ 关键：将 WGS-84 坐标转换为 GCJ-02 坐标（解决中国 GPS 偏移问题）
+        let gcj02Coordinates = CoordinateConverter.wgs84ToGcj02(trackingPath)
+
+        // 创建折线覆盖物
+        let polyline = MKPolyline(coordinates: gcj02Coordinates, count: gcj02Coordinates.count)
+
+        // 添加到地图
+        mapView.addOverlay(polyline)
+
+        print("🗺️ 更新轨迹：\(trackingPath.count) 个点")
+    }
+
     // MARK: - Coordinator
 
     /// 地图代理协调器
-    /// 功能：处理地图事件、实现自动居中逻辑
+    /// 功能：处理地图事件、实现自动居中逻辑、轨迹渲染
     class Coordinator: NSObject, MKMapViewDelegate {
 
         // MARK: - Properties
@@ -98,6 +136,9 @@ struct MapViewRepresentable: UIViewRepresentable {
 
         /// 首次居中标志（防止重复自动居中）
         private var hasInitialCentered = false
+
+        /// 上次路径更新版本号（用于检测变化）
+        var lastPathVersion: Int = 0
 
         // MARK: - Initialization
 
@@ -140,6 +181,25 @@ struct MapViewRepresentable: UIViewRepresentable {
             }
         }
 
+        /// ⭐ 关键方法：为覆盖物提供渲染器（轨迹线样式）
+        /// 注意：必须实现此方法，否则轨迹添加了也看不见！
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            // 检查是否是折线覆盖物
+            if let polyline = overlay as? MKPolyline {
+                let renderer = MKPolylineRenderer(polyline: polyline)
+
+                // 设置轨迹线样式
+                renderer.strokeColor = UIColor.cyan       // 青色（末世科技感）
+                renderer.lineWidth = 5                    // 线宽 5pt
+                renderer.lineCap = .round                 // 圆头线帽
+                renderer.lineJoin = .round                // 圆角连接
+
+                return renderer
+            }
+
+            return MKOverlayRenderer(overlay: overlay)
+        }
+
         /// 地图区域改变完成时调用
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             // 可用于追踪用户手动移动地图（暂不需要实现）
@@ -150,4 +210,16 @@ struct MapViewRepresentable: UIViewRepresentable {
             // 可用于地图加载完成后的额外配置（暂不需要实现）
         }
     }
+}
+
+// MARK: - Preview
+
+#Preview {
+    MapViewRepresentable(
+        userLocation: .constant(nil),
+        hasLocatedUser: .constant(false),
+        trackingPath: .constant([]),
+        pathUpdateVersion: 0,
+        isTracking: false
+    )
 }

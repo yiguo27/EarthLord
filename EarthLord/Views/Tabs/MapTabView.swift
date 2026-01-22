@@ -2,7 +2,7 @@
 //  MapTabView.swift
 //  EarthLord
 //
-//  地图页面 - 显示真实地图、用户位置、定位权限管理
+//  地图页面 - 显示真实地图、用户位置、定位权限管理、圈地追踪
 //
 
 import SwiftUI
@@ -39,14 +39,20 @@ struct MapTabView: View {
                 mapContentView
             }
 
-            // 右下角定位按钮
+            // 右下角按钮组
             VStack {
                 Spacer()
                 HStack {
                     Spacer()
-                    relocateButton
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 20)
+                    VStack(spacing: 12) {
+                        // 圈地按钮
+                        trackingButton
+
+                        // 定位按钮
+                        relocateButton
+                    }
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 20)
                 }
             }
         }
@@ -103,10 +109,13 @@ struct MapTabView: View {
     private var mapContentView: some View {
         ZStack {
             if locationManager.isAuthorized {
-                // 已授权：显示地图
+                // 已授权：显示地图（包含轨迹渲染）
                 MapViewRepresentable(
                     userLocation: $userLocation,
-                    hasLocatedUser: $hasLocatedUser
+                    hasLocatedUser: $hasLocatedUser,
+                    trackingPath: $locationManager.pathCoordinates,
+                    pathUpdateVersion: locationManager.pathUpdateVersion,
+                    isTracking: locationManager.isTracking
                 )
                 .ignoresSafeArea(edges: .bottom)
             } else if locationManager.isDenied {
@@ -217,11 +226,48 @@ struct MapTabView: View {
         }
     }
 
+    /// 圈地追踪按钮
+    private var trackingButton: some View {
+        Button(action: {
+            if locationManager.isTracking {
+                locationManager.stopPathTracking()
+            } else {
+                locationManager.startPathTracking()
+            }
+        }) {
+            HStack(spacing: 8) {
+                // 图标
+                Image(systemName: locationManager.isTracking ? "stop.fill" : "flag.fill")
+                    .font(.system(size: 16, weight: .semibold))
+
+                // 文字
+                if locationManager.isTracking {
+                    Text(languageManager.localizedString("停止圈地"))
+                        .font(.system(size: 14, weight: .semibold))
+
+                    // 显示当前点数
+                    Text("(\(locationManager.pathCoordinates.count))")
+                        .font(.system(size: 12, weight: .medium))
+                } else {
+                    Text(languageManager.localizedString("开始圈地"))
+                        .font(.system(size: 14, weight: .semibold))
+                }
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(locationManager.isTracking ? Color.red : ApocalypseTheme.primary)
+            .clipShape(Capsule())
+            .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
+        }
+        .opacity(locationManager.isAuthorized ? 1 : 0)
+    }
+
     /// 右下角重新定位按钮
     private var relocateButton: some View {
         Button(action: {
             // 重新居中到用户位置
-            if let location = userLocation {
+            if let _ = userLocation {
                 hasLocatedUser = false  // 重置标志，触发重新居中
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     hasLocatedUser = true
