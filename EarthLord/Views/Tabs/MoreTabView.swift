@@ -186,6 +186,33 @@ struct MoreTabView: View {
                 title: languageManager.localizedString("关于"),
                 iconColor: .gray
             ) {}
+
+            Divider().padding(.leading, 56)
+
+            // 开发测试入口
+            NavigationLink {
+                TestMenuView()
+            } label: {
+                HStack(spacing: 16) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.purple.opacity(0.15))
+                            .frame(width: 40, height: 40)
+                        Image(systemName: "wrench.and.screwdriver")
+                            .font(.system(size: 18))
+                            .foregroundColor(.purple)
+                    }
+                    Text(languageManager.localizedString("开发测试"))
+                        .font(.system(size: 16))
+                        .foregroundColor(ApocalypseTheme.textPrimary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14))
+                        .foregroundColor(ApocalypseTheme.textMuted)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+            }
         }
         .background(ApocalypseTheme.cardBackground)
         .cornerRadius(16)

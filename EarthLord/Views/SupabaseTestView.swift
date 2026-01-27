@@ -8,12 +8,6 @@
 import SwiftUI
 import Supabase
 
-// MARK: - Supabase 客户端（在 View 外部定义）
-let supabase = SupabaseClient(
-    supabaseURL: URL(string: "https://hrtdgvplerzybnodjqmk.supabase.co")!,
-    supabaseKey: "sb_publishable_aJg9TdFOGBAGpYgoBirNSw_IKkHVaAT"
-)
-
 /// Supabase连接测试视图
 struct SupabaseTestView: View {
     // MARK: - 状态

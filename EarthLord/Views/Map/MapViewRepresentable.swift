@@ -3,7 +3,7 @@
 //  EarthLord
 //
 //  MKMapView的SwiftUI包装器 - 将UIKit的地图组件桥接到SwiftUI
-//  支持末世滤镜、路径追踪轨迹渲染
+//  支持末世滤镜、路径追踪轨迹渲染、验证结果变色、多边形填充
 //
 
 import SwiftUI
@@ -12,7 +12,7 @@ import MapKit
 // MARK: - MapViewRepresentable
 
 /// 地图视图包装器
-/// 功能：显示苹果地图、应用末世滤镜、处理用户位置更新、自动居中、轨迹渲染
+/// 功能：显示苹果地图、应用末世滤镜、处理用户位置更新、自动居中、轨迹渲染、验证结果变色、多边形填充
 struct MapViewRepresentable: UIViewRepresentable {
 
     // MARK: - Binding Properties
@@ -33,6 +33,12 @@ struct MapViewRepresentable: UIViewRepresentable {
 
     /// 是否正在追踪
     var isTracking: Bool
+
+    /// 路径是否闭合（用于轨迹变色和多边形填充）
+    var isPathClosed: Bool
+
+    /// 领地验证是否通过（用于确定轨迹颜色：通过=绿色，失败=红色）
+    var territoryValidationPassed: Bool = false
 
     // MARK: - UIViewRepresentable Methods
 
@@ -69,10 +75,16 @@ struct MapViewRepresentable: UIViewRepresentable {
 
     /// 更新地图视图
     func updateUIView(_ uiView: MKMapView, context: Context) {
-        // ⭐ 关键：检测路径更新版本变化，更新轨迹显示
-        if context.coordinator.lastPathVersion != pathUpdateVersion {
+        // ⭐ 关键：检测路径更新版本变化、闭环状态变化或验证状态变化，更新轨迹显示
+        let needsUpdate = context.coordinator.lastPathVersion != pathUpdateVersion ||
+                          context.coordinator.lastClosedState != isPathClosed ||
+                          context.coordinator.lastValidationState != territoryValidationPassed
+
+        if needsUpdate {
             context.coordinator.lastPathVersion = pathUpdateVersion
-            updateTrackingPath(on: uiView)
+            context.coordinator.lastClosedState = isPathClosed
+            context.coordinator.lastValidationState = territoryValidationPassed
+            updateTrackingPath(on: uiView, coordinator: context.coordinator)
         }
     }
 
@@ -102,10 +114,12 @@ struct MapViewRepresentable: UIViewRepresentable {
     }
 
     /// 更新追踪路径显示
-    /// - Parameter mapView: 地图视图
-    private func updateTrackingPath(on mapView: MKMapView) {
-        // 移除旧的轨迹覆盖物
-        let existingOverlays = mapView.overlays.filter { $0 is MKPolyline }
+    /// - Parameters:
+    ///   - mapView: 地图视图
+    ///   - coordinator: 协调器（用于访问闭环状态）
+    private func updateTrackingPath(on mapView: MKMapView, coordinator: Coordinator) {
+        // 移除旧的轨迹覆盖物（折线和多边形）
+        let existingOverlays = mapView.overlays.filter { $0 is MKPolyline || $0 is MKPolygon }
         mapView.removeOverlays(existingOverlays)
 
         // 如果路径点少于 2 个，无法绘制线段
@@ -117,16 +131,24 @@ struct MapViewRepresentable: UIViewRepresentable {
         // 创建折线覆盖物
         let polyline = MKPolyline(coordinates: gcj02Coordinates, count: gcj02Coordinates.count)
 
-        // 添加到地图
+        // 添加折线到地图
         mapView.addOverlay(polyline)
 
-        print("🗺️ 更新轨迹：\(trackingPath.count) 个点")
+        // ⭐ 关键：如果路径已闭合且验证通过且点数 >= 3，创建多边形填充
+        if isPathClosed && territoryValidationPassed && gcj02Coordinates.count >= 3 {
+            let polygon = MKPolygon(coordinates: gcj02Coordinates, count: gcj02Coordinates.count)
+            // 先添加多边形（在下层），再添加折线（在上层）
+            mapView.insertOverlay(polygon, below: polyline)
+            print("🟩 添加闭环多边形填充（验证通过）")
+        }
+
+        print("🗺️ 更新轨迹：\(trackingPath.count) 个点，闭环状态：\(isPathClosed)，验证通过：\(territoryValidationPassed)")
     }
 
     // MARK: - Coordinator
 
     /// 地图代理协调器
-    /// 功能：处理地图事件、实现自动居中逻辑、轨迹渲染
+    /// 功能：处理地图事件、实现自动居中逻辑、轨迹渲染、验证结果变色
     class Coordinator: NSObject, MKMapViewDelegate {
 
         // MARK: - Properties
@@ -139,6 +161,12 @@ struct MapViewRepresentable: UIViewRepresentable {
 
         /// 上次路径更新版本号（用于检测变化）
         var lastPathVersion: Int = 0
+
+        /// 上次闭环状态（用于检测闭环状态变化，触发轨迹颜色更新）
+        var lastClosedState: Bool = false
+
+        /// 上次验证状态（用于检测验证状态变化，触发轨迹颜色更新）
+        var lastValidationState: Bool = false
 
         // MARK: - Initialization
 
@@ -181,18 +209,43 @@ struct MapViewRepresentable: UIViewRepresentable {
             }
         }
 
-        /// ⭐ 关键方法：为覆盖物提供渲染器（轨迹线样式）
+        /// ⭐ 关键方法：为覆盖物提供渲染器（轨迹线样式 + 多边形填充）
         /// 注意：必须实现此方法，否则轨迹添加了也看不见！
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            // 检查是否是折线覆盖物
+            // 处理折线覆盖物（轨迹线）
             if let polyline = overlay as? MKPolyline {
                 let renderer = MKPolylineRenderer(polyline: polyline)
 
-                // 设置轨迹线样式
-                renderer.strokeColor = UIColor.cyan       // 青色（末世科技感）
+                // ⭐ 关键：根据闭环状态和验证结果设置轨迹颜色
+                if parent.isPathClosed {
+                    if parent.territoryValidationPassed {
+                        // 验证通过：绿色轨迹
+                        renderer.strokeColor = UIColor.systemGreen
+                    } else {
+                        // 验证失败：红色轨迹
+                        renderer.strokeColor = UIColor.systemRed
+                    }
+                } else {
+                    // 未闭环：青色轨迹（末世科技感）
+                    renderer.strokeColor = UIColor.systemCyan
+                }
+
                 renderer.lineWidth = 5                    // 线宽 5pt
                 renderer.lineCap = .round                 // 圆头线帽
                 renderer.lineJoin = .round                // 圆角连接
+
+                return renderer
+            }
+
+            // 处理多边形覆盖物（闭环区域填充）
+            if let polygon = overlay as? MKPolygon {
+                let renderer = MKPolygonRenderer(polygon: polygon)
+
+                // 半透明绿色填充（只在验证通过时显示）
+                renderer.fillColor = UIColor.systemGreen.withAlphaComponent(0.25)
+                // 绿色边框
+                renderer.strokeColor = UIColor.systemGreen
+                renderer.lineWidth = 2
 
                 return renderer
             }
@@ -220,6 +273,8 @@ struct MapViewRepresentable: UIViewRepresentable {
         hasLocatedUser: .constant(false),
         trackingPath: .constant([]),
         pathUpdateVersion: 0,
-        isTracking: false
+        isTracking: false,
+        isPathClosed: false,
+        territoryValidationPassed: false
     )
 }

@@ -8,6 +8,8 @@
 import Foundation
 import Combine
 import Supabase
+import GoogleSignIn
+import UIKit
 
 @MainActor
 final class AuthManager: ObservableObject {
@@ -50,6 +52,13 @@ final class AuthManager: ObservableObject {
     }
 
     private init() {
+        // 配置 Google Sign-In
+        // ⚠️ 重要：请将下面的 YOUR_IOS_CLIENT_ID 替换为你在 Google Cloud Console 创建的 iOS 客户端 ID
+        // 参考 GOOGLE_SIGN_IN_SETUP.md 文件获取详细配置说明
+        GIDSignIn.sharedInstance.configuration = GIDConfiguration(
+            clientID: "YOUR_IOS_CLIENT_ID.apps.googleusercontent.com"
+        )
+
         Task { await setupAuthListener() }
     }
 
@@ -247,6 +256,67 @@ final class AuthManager: ObservableObject {
             errorMessage = parseError(error)
         }
         isLoading = false
+    }
+
+    // MARK: - Google 登录
+
+    /// Google 登录
+    func signInWithGoogle() async {
+        print("🔐 AuthManager: 开始 Google 登录流程")
+
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootViewController = windowScene.windows.first?.rootViewController else {
+            print("🔐 AuthManager: ❌ 无法获取根视图控制器")
+            await MainActor.run {
+                errorMessage = "无法初始化登录，请重试"
+            }
+            return
+        }
+
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+            currentFlow = .none
+        }
+
+        do {
+            // 第一步：通过 Google Sign-In SDK 获取 ID Token
+            print("🔐 AuthManager: 正在调用 Google Sign-In SDK...")
+            let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController)
+
+            guard let idToken = result.user.idToken?.tokenString else {
+                print("🔐 AuthManager: ❌ 无法获取 Google ID Token")
+                await MainActor.run {
+                    errorMessage = "Google 登录失败：无法获取认证信息"
+                    isLoading = false
+                }
+                return
+            }
+
+            print("🔐 AuthManager: ✅ 成功获取 Google ID Token")
+
+            // 第二步：使用 ID Token 通过 Supabase 登录
+            print("🔐 AuthManager: 正在通过 Supabase 登录...")
+            let response = try await supabase.auth.signInWithIdToken(
+                credentials: .init(
+                    provider: .google,
+                    idToken: idToken
+                )
+            )
+
+            print("🔐 AuthManager: ✅ Google 登录成功")
+            await MainActor.run {
+                currentUser = response.user
+                isAuthenticated = true
+                isLoading = false
+            }
+        } catch {
+            print("🔐 AuthManager: ❌ Google 登录失败: \(error.localizedDescription)")
+            await MainActor.run {
+                errorMessage = parseError(error)
+                isLoading = false
+            }
+        }
     }
 
     func checkSession() async {
