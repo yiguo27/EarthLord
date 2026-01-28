@@ -100,6 +100,16 @@ struct MapTabView: View {
             } else if locationManager.isAuthorized {
                 locationManager.startUpdatingLocation()
             }
+
+            // 加载所有领地数据（用于碰撞检测）
+            Task {
+                do {
+                    _ = try await territoryManager.loadAllTerritories()
+                    print("📥 MapTabView: 已加载 \(territoryManager.territories.count) 个领地用于碰撞检测")
+                } catch {
+                    print("❌ MapTabView: 加载领地数据失败 - \(error.localizedDescription)")
+                }
+            }
         }
         // ⭐ 监听闭环状态，闭环后根据验证结果显示横幅
         .onReceive(locationManager.$isPathClosed) { isClosed in
@@ -352,6 +362,32 @@ struct MapTabView: View {
     private var trackingButton: some View {
         Button(action: {
             if locationManager.isTracking {
+                // 停止圈地前，先进行验证（如果还没闭环的话）
+                if !locationManager.isPathClosed && locationManager.pathCoordinates.count >= 3 {
+                    // 手动触发验证
+                    let (isValid, errorMessage) = locationManager.validateTerritory()
+                    locationManager.territoryValidationPassed = isValid
+                    locationManager.territoryValidationError = errorMessage
+                    locationManager.isPathClosed = true  // 标记为已闭合，避免继续记录点
+
+                    // 显示验证结果横幅
+                    withAnimation {
+                        showValidationBanner = true
+                    }
+                    // 3 秒后自动隐藏横幅
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        withAnimation {
+                            showValidationBanner = false
+                        }
+                        // 如果验证失败，再延迟2秒后清除路径（给用户时间查看）
+                        if !locationManager.territoryValidationPassed {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                locationManager.resetPathState()
+                            }
+                        }
+                    }
+                }
+
                 locationManager.stopPathTracking()
                 trackingStartTime = nil
             } else {
@@ -482,8 +518,8 @@ struct MapTabView: View {
             uploadMessage = "领地登记成功！"
             showUploadAlert = true
 
-            // ⚠️ 关键：上传成功后必须停止追踪！
-            locationManager.stopPathTracking()
+            // ⚠️ 关键：上传成功后必须重置所有状态！
+            locationManager.resetPathState()
             trackingStartTime = nil
 
         } catch {
