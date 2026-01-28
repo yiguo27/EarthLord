@@ -235,14 +235,6 @@ class LocationManager: NSObject, ObservableObject {
         // 更新状态
         isTracking = false
 
-        // ⚠️ 重要：重置所有状态（防止重复上传）
-        isPathClosed = false
-        territoryValidationPassed = false
-        territoryValidationError = nil
-        calculatedArea = 0
-        pathCoordinates.removeAll()
-        pathUpdateVersion += 1
-
         // 重置速度检测状态
         speedWarning = nil
         isOverSpeed = false
@@ -250,7 +242,20 @@ class LocationManager: NSObject, ObservableObject {
         lastRecordedLocation = nil
 
         // 📋 记录日志：停止圈地
-        TerritoryLogger.shared.info("停止圈地追踪，所有状态已重置")
+        TerritoryLogger.shared.info("停止圈地追踪")
+    }
+
+    /// 完全重置所有圈地状态（上传成功后调用）
+    func resetPathState() {
+        isPathClosed = false
+        territoryValidationPassed = false
+        territoryValidationError = nil
+        calculatedArea = 0
+        pathCoordinates.removeAll()
+        pathUpdateVersion += 1
+
+        // 📋 记录日志：重置状态
+        TerritoryLogger.shared.info("圈地状态已完全重置")
     }
 
     /// 清除路径
