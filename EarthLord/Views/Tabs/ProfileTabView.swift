@@ -11,6 +11,7 @@ import Supabase
 struct ProfileTabView: View {
     @ObservedObject private var authManager = AuthManager.shared
     @ObservedObject private var languageManager = LanguageManager.shared
+    @ObservedObject private var statsManager = StatsManager.shared
     @State private var showLogoutConfirm = false
     @State private var showDeleteAccountSheet = false
     @State private var deleteConfirmText = ""
@@ -69,6 +70,12 @@ struct ProfileTabView: View {
         }
         .sheet(isPresented: $showLanguagePicker) {
             languagePickerSheet
+        }
+        .onAppear {
+            // 页面出现时自动刷新统计数据
+            Task {
+                await statsManager.refreshStats()
+            }
         }
     }
 
@@ -375,6 +382,24 @@ struct ProfileTabView: View {
                     .foregroundColor(ApocalypseTheme.textPrimary)
 
                 Spacer()
+
+                // 刷新按钮
+                Button(action: {
+                    Task {
+                        await statsManager.refreshStats()
+                    }
+                }) {
+                    if statsManager.isLoading {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .tint(ApocalypseTheme.primary)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12))
+                            .foregroundColor(ApocalypseTheme.primary)
+                    }
+                }
+                .disabled(statsManager.isLoading)
             }
 
             // 统计网格
@@ -383,14 +408,14 @@ struct ProfileTabView: View {
                     StatItem(
                         icon: "flag.fill",
                         title: languageManager.localizedString("领地"),
-                        value: "0",
+                        value: "\(statsManager.territoryCount)",
                         color: ApocalypseTheme.primary
                     )
 
                     StatItem(
                         icon: "mappin.circle.fill",
                         title: languageManager.localizedString("资源点"),
-                        value: "0",
+                        value: "\(statsManager.resourcePointCount)",
                         color: .orange
                     )
                 }
@@ -399,14 +424,14 @@ struct ProfileTabView: View {
                     StatItem(
                         icon: "location.fill",
                         title: languageManager.localizedString("探索距离"),
-                        value: "0 km",
+                        value: String(format: "%.1f km", statsManager.explorationDistance),
                         color: .green
                     )
 
                     StatItem(
                         icon: "clock.fill",
                         title: languageManager.localizedString("生存天数"),
-                        value: "1",
+                        value: "\(statsManager.survivalDays)",
                         color: .blue
                     )
                 }

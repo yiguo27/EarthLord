@@ -16,6 +16,9 @@ struct Territory: Codable, Identifiable {
     let area: Double
     let pointCount: Int?
     let isActive: Bool?
+    let createdAt: Date?          // 创建时间
+    let startedAt: Date?          // 开始圈地时间
+    let completedAt: Date?        // 完成圈地时间
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -25,6 +28,9 @@ struct Territory: Codable, Identifiable {
         case area
         case pointCount = "point_count"
         case isActive = "is_active"
+        case createdAt = "created_at"
+        case startedAt = "started_at"
+        case completedAt = "completed_at"
     }
 
     /// 将 path JSON 转为 CLLocationCoordinate2D 数组
