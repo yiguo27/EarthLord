@@ -106,38 +106,10 @@ struct TerritoryDetailView: View {
 
     /// 地图视图
     private var mapView: some View {
-        Map(coordinateRegion: .constant(region), annotationItems: [territory]) { territory in
-            MapAnnotation(coordinate: region.center) {
-                // 领地中心点标记
-                VStack(spacing: 4) {
-                    Image(systemName: "flag.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(ApocalypseTheme.primary)
-
-                    Text(territory.name ?? "领地")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.black.opacity(0.7))
-                        .cornerRadius(8)
-                }
-            }
-        }
-        .overlay(
-            // 领地多边形（使用自定义绘制）
-            TerritoryPolygonShape(
-                coordinates: territory.toCoordinates(),
-                region: region
-            )
-            .stroke(ApocalypseTheme.primary, lineWidth: 2)
-            .background(
-                TerritoryPolygonShape(
-                    coordinates: territory.toCoordinates(),
-                    region: region
-                )
-                .fill(ApocalypseTheme.primary.opacity(0.2))
-            )
+        TerritoryMapView(
+            coordinates: territory.toCoordinates(),
+            region: region,
+            territoryName: territory.name
         )
         .frame(maxWidth: .infinity)
         .frame(height: 400)
@@ -265,36 +237,6 @@ struct TerritoryDetailView: View {
         )
 
         return MKCoordinateRegion(center: center, span: span)
-    }
-}
-
-// MARK: - Territory Polygon Shape
-
-/// 自定义形状：绘制领地多边形
-struct TerritoryPolygonShape: Shape {
-    let coordinates: [CLLocationCoordinate2D]
-    let region: MKCoordinateRegion
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-
-        guard coordinates.count >= 3 else { return path }
-
-        // 将地理坐标转换为屏幕坐标
-        let points = coordinates.map { coord -> CGPoint in
-            let x = (coord.longitude - (region.center.longitude - region.span.longitudeDelta / 2)) / region.span.longitudeDelta * rect.width
-            let y = ((region.center.latitude + region.span.latitudeDelta / 2) - coord.latitude) / region.span.latitudeDelta * rect.height
-            return CGPoint(x: x, y: y)
-        }
-
-        // 绘制多边形
-        path.move(to: points[0])
-        for point in points.dropFirst() {
-            path.addLine(to: point)
-        }
-        path.closeSubpath()
-
-        return path
     }
 }
 
