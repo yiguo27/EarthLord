@@ -117,10 +117,10 @@ struct BackpackView: View {
         }
         .navigationTitle("背包")
         .navigationBarTitleDisplayMode(.large)
-        .onChange(of: searchText) { _, newValue in
+        .onChange(of: searchText) { _ in
             applyFilter()
         }
-        .onChange(of: selectedCategory) { _, _ in
+        .onChange(of: selectedCategory) { _ in
             applyFilter()
         }
         .onAppear {
