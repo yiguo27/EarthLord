@@ -38,18 +38,33 @@ struct TerritoryMapView: UIViewRepresentable {
         // 设置地图区域
         mapView.setRegion(region, animated: false)
 
-        // 添加领地多边形
+        // 调试日志
+        print("🗺️ TerritoryMapView: 坐标数量 = \(coordinates.count)")
+
+        // 添加领地多边形和边界
         if coordinates.count >= 3 {
             // ⭐ 关键：将 WGS-84 坐标转换为 GCJ-02 坐标（解决中国 GPS 偏移问题）
-            let gcj02Coordinates = CoordinateConverter.wgs84ToGcj02(coordinates)
+            var gcj02Coordinates = CoordinateConverter.wgs84ToGcj02(coordinates)
 
-            // 创建多边形
+            // 确保多边形闭合（首尾相连）
+            if let first = gcj02Coordinates.first, let last = gcj02Coordinates.last {
+                if first.latitude != last.latitude || first.longitude != last.longitude {
+                    gcj02Coordinates.append(first)
+                }
+            }
+
+            print("🗺️ TerritoryMapView: 转换后坐标数量 = \(gcj02Coordinates.count)")
+            print("🗺️ TerritoryMapView: 第一个点 = (\(gcj02Coordinates[0].latitude), \(gcj02Coordinates[0].longitude))")
+
+            // 创建多边形（填充区域）
             let polygon = MKPolygon(coordinates: gcj02Coordinates, count: gcj02Coordinates.count)
             mapView.addOverlay(polygon)
+            print("✅ TerritoryMapView: 添加多边形覆盖物")
 
-            // 创建边界线
+            // 创建边界线（绿色轮廓）
             let polyline = MKPolyline(coordinates: gcj02Coordinates, count: gcj02Coordinates.count)
             mapView.addOverlay(polyline)
+            print("✅ TerritoryMapView: 添加折线覆盖物")
 
             // 添加中心点标注
             let centerAnnotation = TerritoryAnnotation(
@@ -57,6 +72,9 @@ struct TerritoryMapView: UIViewRepresentable {
                 title: territoryName ?? "领地"
             )
             mapView.addAnnotation(centerAnnotation)
+            print("✅ TerritoryMapView: 添加中心点标注")
+        } else {
+            print("❌ TerritoryMapView: 坐标点不足（需要至少3个点）")
         }
 
         // 应用末世滤镜效果（可选）
@@ -96,25 +114,29 @@ struct TerritoryMapView: UIViewRepresentable {
     class Coordinator: NSObject, MKMapViewDelegate {
         /// 为覆盖物提供渲染器
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            // 处理多边形覆盖物
+            print("🎨 TerritoryMapView: 渲染覆盖物 - \(type(of: overlay))")
+
+            // 处理多边形覆盖物（填充）
             if let polygon = overlay as? MKPolygon {
                 let renderer = MKPolygonRenderer(polygon: polygon)
-                // 半透明橙色填充
-                renderer.fillColor = UIColor.systemOrange.withAlphaComponent(0.25)
-                // 橙色边框
-                renderer.strokeColor = UIColor.systemOrange
-                renderer.lineWidth = 3
+                // 半透明绿色填充
+                renderer.fillColor = UIColor.systemGreen.withAlphaComponent(0.25)
+                // 绿色边框
+                renderer.strokeColor = UIColor.systemGreen
+                renderer.lineWidth = 2
+                print("✅ TerritoryMapView: 渲染多边形 - 绿色")
                 return renderer
             }
 
-            // 处理折线覆盖物
+            // 处理折线覆盖物（边界线）
             if let polyline = overlay as? MKPolyline {
                 let renderer = MKPolylineRenderer(polyline: polyline)
-                // 橙色轨迹
-                renderer.strokeColor = UIColor.systemOrange
-                renderer.lineWidth = 5
+                // 绿色轨迹
+                renderer.strokeColor = UIColor.systemGreen
+                renderer.lineWidth = 4
                 renderer.lineCap = .round
                 renderer.lineJoin = .round
+                print("✅ TerritoryMapView: 渲染折线 - 绿色")
                 return renderer
             }
 
@@ -129,7 +151,7 @@ struct TerritoryMapView: UIViewRepresentable {
             }
 
             // 领地标注
-            if let territoryAnnotation = annotation as? TerritoryAnnotation {
+            if annotation is TerritoryAnnotation {
                 let identifier = "TerritoryPin"
                 var annotationView = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
 
@@ -141,7 +163,7 @@ struct TerritoryMapView: UIViewRepresentable {
                 }
 
                 // 设置标注样式
-                annotationView?.markerTintColor = .systemOrange
+                annotationView?.markerTintColor = .systemGreen
                 annotationView?.glyphImage = UIImage(systemName: "flag.fill")
 
                 return annotationView

@@ -23,13 +23,19 @@ struct TerritoryDetailView: View {
 
         // 计算领地中心点和范围
         let coordinates = territory.toCoordinates()
+        print("🏁 TerritoryDetailView: 领地 ID = \(territory.id.prefix(8))")
+        print("🏁 TerritoryDetailView: path 数组长度 = \(territory.path.count)")
+        print("🏁 TerritoryDetailView: 转换后坐标数量 = \(coordinates.count)")
+
         if coordinates.isEmpty {
             // 如果没有坐标，使用默认位置
+            print("❌ TerritoryDetailView: 坐标为空，使用默认位置")
             _region = State(initialValue: MKCoordinateRegion(
                 center: CLLocationCoordinate2D(latitude: 0, longitude: 0),
                 span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
             ))
         } else {
+            print("✅ TerritoryDetailView: 第一个坐标 = (\(coordinates[0].latitude), \(coordinates[0].longitude))")
             _region = State(initialValue: Self.calculateRegion(from: coordinates))
         }
     }
@@ -106,8 +112,11 @@ struct TerritoryDetailView: View {
 
     /// 地图视图
     private var mapView: some View {
-        TerritoryMapView(
-            coordinates: territory.toCoordinates(),
+        let coordinates = territory.toCoordinates()
+        print("📍 TerritoryDetailView.mapView: 传递给地图的坐标数量 = \(coordinates.count)")
+
+        return TerritoryMapView(
+            coordinates: coordinates,
             region: region,
             territoryName: territory.name
         )
