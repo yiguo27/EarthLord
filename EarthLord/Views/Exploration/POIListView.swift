@@ -45,6 +45,12 @@ struct POIListView: View {
     /// 是否正在搜索
     @State private var isSearching = false
 
+    /// 搜索按钮缩放状态
+    @State private var searchButtonScale: CGFloat = 1.0
+
+    /// 列表项是否已加载（用于淡入动画）
+    @State private var itemsLoaded = false
+
     /// GPS 坐标（模拟数据）
     private let mockGPSCoordinate = (latitude: 22.54, longitude: 114.06)
 
@@ -76,6 +82,12 @@ struct POIListView: View {
         }
         .navigationTitle("附近地点")
         .navigationBarTitleDisplayMode(.large)
+        .onAppear {
+            // 触发列表淡入动画
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                itemsLoaded = true
+            }
+        }
     }
 
     // MARK: - Subviews
@@ -118,6 +130,17 @@ struct POIListView: View {
     /// 搜索按钮
     private var searchButton: some View {
         Button(action: {
+            // 点击缩放动画
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                searchButtonScale = 0.95
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    searchButtonScale = 1.0
+                }
+            }
+
             performSearch()
         }) {
             HStack(spacing: 12) {
@@ -153,6 +176,7 @@ struct POIListView: View {
             .cornerRadius(12)
             .shadow(color: ApocalypseTheme.primary.opacity(0.3), radius: 8, x: 0, y: 4)
         }
+        .scaleEffect(searchButtonScale)
         .disabled(isSearching)
     }
 
@@ -203,12 +227,17 @@ struct POIListView: View {
                     emptyStateView
                         .padding(.top, 60)
                 } else {
-                    ForEach(filteredPOIs) { poi in
-                        poiCardView(poi: poi)
-                            .onTapGesture {
-                                print("📍 点击了 POI: \(poi.name)")
-                                // TODO: 跳转到详情页
-                            }
+                    ForEach(Array(filteredPOIs.enumerated()), id: \.element.id) { index, poi in
+                        NavigationLink(destination: POIDetailView(poi: poi)) {
+                            poiCardView(poi: poi)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .opacity(itemsLoaded ? 1 : 0)
+                        .offset(y: itemsLoaded ? 0 : 20)
+                        .animation(
+                            .easeOut(duration: 0.4).delay(Double(index) * 0.1),
+                            value: itemsLoaded
+                        )
                     }
                 }
             }
@@ -219,19 +248,43 @@ struct POIListView: View {
 
     /// 空状态视图
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "map")
+        VStack(spacing: 20) {
+            // 图标
+            Image(systemName: allPOIs.isEmpty ? "map.fill" : "magnifyingglass")
                 .font(.system(size: 60))
                 .foregroundColor(ApocalypseTheme.textMuted)
 
-            Text("未找到符合条件的地点")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(ApocalypseTheme.textSecondary)
+            // 主标题
+            Text(allPOIs.isEmpty ? "附近暂无兴趣点" : "没有找到该类型的地点")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(ApocalypseTheme.textPrimary)
 
-            Text("尝试调整筛选条件或搜索附近区域")
-                .font(.system(size: 14))
+            // 副标题
+            Text(allPOIs.isEmpty ? "点击搜索按钮发现周围的废墟" : "尝试调整筛选条件或搜索其他类型")
+                .font(.system(size: 15))
                 .foregroundColor(ApocalypseTheme.textMuted)
                 .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+
+            // 如果完全没有POI，显示搜索提示
+            if allPOIs.isEmpty {
+                Button(action: {
+                    performSearch()
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 16))
+                        Text("点击上方搜索按钮")
+                            .font(.system(size: 14, weight: .medium))
+                    }
+                    .foregroundColor(ApocalypseTheme.primary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(ApocalypseTheme.primary.opacity(0.1))
+                    .cornerRadius(20)
+                }
+                .padding(.top, 8)
+            }
         }
     }
 

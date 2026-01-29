@@ -47,6 +47,10 @@ struct MapTabView: View {
     @State private var showCollisionWarning = false
     @State private var collisionWarningLevel: WarningLevel = .safe
 
+    // MARK: - 探索功能状态
+    @State private var isExploring = false
+    @State private var showExplorationResult = false
+
     // MARK: - Computed Properties
 
     /// 当前用户 ID（从 AuthManager 获取）
@@ -90,26 +94,34 @@ struct MapTabView: View {
                 collisionWarningBanner(message: warning, level: collisionWarningLevel)
             }
 
-            // 右下角按钮组
+            // 底部按钮组
             VStack {
                 Spacer()
-                HStack {
-                    Spacer()
-                    VStack(spacing: 12) {
-                        // 确认登记按钮（验证通过后显示）
-                        if locationManager.territoryValidationPassed {
-                            confirmButton
-                        }
 
-                        // 圈地按钮
-                        trackingButton
-
-                        // 定位按钮
-                        relocateButton
+                // 确认登记按钮（验证通过后显示，在按钮行上方）
+                if locationManager.territoryValidationPassed {
+                    HStack {
+                        Spacer()
+                        confirmButton
+                            .padding(.trailing, 20)
                     }
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 20)
                 }
+
+                // 底部按钮行：开始圈地、定位、探索
+                HStack(spacing: 16) {
+                    // 开始圈地按钮
+                    trackingButton
+                        .frame(maxWidth: .infinity)
+
+                    // 定位按钮
+                    relocateButton
+
+                    // 探索按钮
+                    explorationButton
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
             }
         }
         .onAppear {
@@ -153,6 +165,10 @@ struct MapTabView: View {
                 showUploadAlert = false
                 uploadMessage = nil
             }
+        }
+        // 探索结果弹窗
+        .sheet(isPresented: $showExplorationResult) {
+            ExplorationResultView(result: MockExplorationData.mockExplorationResult)
         }
     }
 
@@ -507,6 +523,37 @@ struct MapTabView: View {
         .opacity(locationManager.isAuthorized ? 1 : 0)
     }
 
+    /// 探索按钮
+    private var explorationButton: some View {
+        Button(action: {
+            performExploration()
+        }) {
+            HStack(spacing: 8) {
+                // 图标
+                if isExploring {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.8)
+                } else {
+                    Image(systemName: "binoculars.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+
+                // 文字
+                Text(isExploring ? "探索中..." : languageManager.localizedString("探索"))
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(isExploring ? Color.gray : ApocalypseTheme.primary)
+            .clipShape(Capsule())
+            .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
+        }
+        .disabled(isExploring)
+        .opacity(locationManager.isAuthorized ? 1 : 0)
+    }
+
     // MARK: - Methods
 
     /// 上传当前领地
@@ -554,6 +601,24 @@ struct MapTabView: View {
         }
 
         isUploading = false
+    }
+
+    /// 执行探索功能
+    private func performExploration() {
+        // 设置为探索中状态
+        isExploring = true
+
+        print("🔍 开始探索附近区域...")
+
+        // 模拟探索过程（1.5秒）
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            // 探索完成
+            isExploring = false
+            print("✅ 探索完成，显示结果")
+
+            // 显示探索结果弹窗
+            showExplorationResult = true
+        }
     }
 
     // MARK: - Day 19: Collision Detection Methods
