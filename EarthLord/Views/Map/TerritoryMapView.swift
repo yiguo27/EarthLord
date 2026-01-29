@@ -32,53 +32,19 @@ struct TerritoryMapView: UIViewRepresentable {
         mapView.isPitchEnabled = false  // 禁用3D倾斜
         mapView.isRotateEnabled = true
 
-        // 设置代理
+        // ⚠️ 关键：必须先设置代理，再添加覆盖物
         mapView.delegate = context.coordinator
 
         // 设置地图区域
         mapView.setRegion(region, animated: false)
 
-        // 调试日志
-        print("🗺️ TerritoryMapView: 坐标数量 = \(coordinates.count)")
+        // 存储坐标到 coordinator
+        context.coordinator.territoryCoordinates = coordinates
 
-        // 添加领地多边形和边界
-        if coordinates.count >= 3 {
-            // ⭐ 关键：将 WGS-84 坐标转换为 GCJ-02 坐标（解决中国 GPS 偏移问题）
-            var gcj02Coordinates = CoordinateConverter.wgs84ToGcj02(coordinates)
-
-            // 确保多边形闭合（首尾相连）
-            if let first = gcj02Coordinates.first, let last = gcj02Coordinates.last {
-                if first.latitude != last.latitude || first.longitude != last.longitude {
-                    gcj02Coordinates.append(first)
-                }
-            }
-
-            print("🗺️ TerritoryMapView: 转换后坐标数量 = \(gcj02Coordinates.count)")
-            print("🗺️ TerritoryMapView: 第一个点 = (\(gcj02Coordinates[0].latitude), \(gcj02Coordinates[0].longitude))")
-
-            // 创建多边形（填充区域）
-            let polygon = MKPolygon(coordinates: gcj02Coordinates, count: gcj02Coordinates.count)
-            mapView.addOverlay(polygon)
-            print("✅ TerritoryMapView: 添加多边形覆盖物")
-
-            // 创建边界线（绿色轮廓）
-            let polyline = MKPolyline(coordinates: gcj02Coordinates, count: gcj02Coordinates.count)
-            mapView.addOverlay(polyline)
-            print("✅ TerritoryMapView: 添加折线覆盖物")
-
-            // 添加中心点标注
-            let centerAnnotation = TerritoryAnnotation(
-                coordinate: region.center,
-                title: territoryName ?? "领地"
-            )
-            mapView.addAnnotation(centerAnnotation)
-            print("✅ TerritoryMapView: 添加中心点标注")
-        } else {
-            print("❌ TerritoryMapView: 坐标点不足（需要至少3个点）")
+        // 延迟添加覆盖物，确保地图准备就绪
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.addTerritoryOverlays(to: mapView, coordinates: coordinates, region: region)
         }
-
-        // 应用末世滤镜效果（可选）
-        applyApocalypseFilter(to: mapView)
 
         return mapView
     }
@@ -86,60 +52,138 @@ struct TerritoryMapView: UIViewRepresentable {
     func updateUIView(_ uiView: MKMapView, context: Context) {
         // 更新地图区域
         uiView.setRegion(region, animated: false)
+
+        // 检查坐标是否改变
+        let coordinatesChanged = context.coordinator.territoryCoordinates.count != coordinates.count ||
+            zip(context.coordinator.territoryCoordinates, coordinates).contains { coord1, coord2 in
+                coord1.latitude != coord2.latitude || coord1.longitude != coord2.longitude
+            }
+
+        // 如果坐标改变，重新添加覆盖物
+        if coordinatesChanged {
+            context.coordinator.territoryCoordinates = coordinates
+
+            // 先移除旧的覆盖物
+            uiView.removeOverlays(uiView.overlays)
+            uiView.removeAnnotations(uiView.annotations)
+
+            // 添加新的覆盖物
+            addTerritoryOverlays(to: uiView, coordinates: coordinates, region: region)
+        }
     }
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
 
-    /// 应用末世滤镜效果
-    private func applyApocalypseFilter(to mapView: MKMapView) {
-        // 色调控制：降低饱和度和亮度，营造荒凉感
-        let colorControls = CIFilter(name: "CIColorControls")
-        colorControls?.setValue(-0.15, forKey: kCIInputBrightnessKey)  // 稍微变暗
-        colorControls?.setValue(0.5, forKey: kCIInputSaturationKey)    // 降低饱和度
+    /// 添加领地覆盖物
+    private func addTerritoryOverlays(to mapView: MKMapView, coordinates: [CLLocationCoordinate2D], region: MKCoordinateRegion) {
+        print("\n========== 开始添加领地覆盖物 ==========")
+        print("🗺️ 原始坐标数量 = \(coordinates.count)")
 
-        // 棕褐色调：废土的泛黄效果
-        let sepiaFilter = CIFilter(name: "CISepiaTone")
-        sepiaFilter?.setValue(0.65, forKey: kCIInputIntensityKey)
-
-        // 应用滤镜到地图图层
-        if let colorControls = colorControls, let sepiaFilter = sepiaFilter {
-            mapView.layer.filters = [colorControls, sepiaFilter]
+        guard coordinates.count >= 3 else {
+            print("❌ 坐标点不足（需要至少3个点）")
+            return
         }
+
+        // 验证坐标有效性
+        for (index, coord) in coordinates.enumerated() {
+            print("📍 坐标[\(index)] = (\(coord.latitude), \(coord.longitude))")
+            if coord.latitude < -90 || coord.latitude > 90 || coord.longitude < -180 || coord.longitude > 180 {
+                print("❌ 坐标[\(index)]无效！")
+                return
+            }
+        }
+
+        // ⭐ 关键：将 WGS-84 坐标转换为 GCJ-02 坐标（解决中国 GPS 偏移问题）
+        let gcj02Coordinates = CoordinateConverter.wgs84ToGcj02(coordinates)
+        print("🔄 转换后坐标数量 = \(gcj02Coordinates.count)")
+
+        // 验证转换后的坐标
+        for (index, coord) in gcj02Coordinates.enumerated() {
+            print("🔄 转换后[\(index)] = (\(coord.latitude), \(coord.longitude))")
+        }
+
+        // ⚠️ 关键：使用 UnsafeMutablePointer 创建坐标数组（避免坐标被释放）
+        let coordinatesPointer = UnsafeMutablePointer<CLLocationCoordinate2D>.allocate(capacity: gcj02Coordinates.count)
+        for (index, coord) in gcj02Coordinates.enumerated() {
+            coordinatesPointer[index] = coord
+        }
+
+        // 创建多边形（MKPolygon 会自动闭合）
+        let polygon = MKPolygon(coordinates: coordinatesPointer, count: gcj02Coordinates.count)
+        coordinatesPointer.deallocate()
+
+        mapView.addOverlay(polygon, level: .aboveRoads)
+        print("✅ 添加多边形覆盖物（自动闭合）")
+
+        // 创建边界线（手动闭合以显示完整边界）
+        var closedCoordinates = gcj02Coordinates
+        if let first = gcj02Coordinates.first {
+            closedCoordinates.append(first)
+        }
+
+        let polylinePointer = UnsafeMutablePointer<CLLocationCoordinate2D>.allocate(capacity: closedCoordinates.count)
+        for (index, coord) in closedCoordinates.enumerated() {
+            polylinePointer[index] = coord
+        }
+
+        let polyline = MKPolyline(coordinates: polylinePointer, count: closedCoordinates.count)
+        polylinePointer.deallocate()
+
+        mapView.addOverlay(polyline, level: .aboveRoads)
+        print("✅ 添加边界线覆盖物（手动闭合，\(closedCoordinates.count)个点）")
+
+        // 添加中心点标注
+        let centerAnnotation = TerritoryAnnotation(
+            coordinate: region.center,
+            title: territoryName ?? "领地"
+        )
+        mapView.addAnnotation(centerAnnotation)
+        print("✅ 添加中心点标注")
+        print("========== 完成添加领地覆盖物 ==========\n")
     }
 
     // MARK: - Coordinator
 
     class Coordinator: NSObject, MKMapViewDelegate {
+        var territoryCoordinates: [CLLocationCoordinate2D] = []
+
         /// 为覆盖物提供渲染器
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            print("🎨 TerritoryMapView: 渲染覆盖物 - \(type(of: overlay))")
+            print("\n🎨 rendererFor 被调用 - \(type(of: overlay))")
 
             // 处理多边形覆盖物（填充）
             if let polygon = overlay as? MKPolygon {
+                print("🎨 创建多边形渲染器")
                 let renderer = MKPolygonRenderer(polygon: polygon)
+
                 // 半透明绿色填充
-                renderer.fillColor = UIColor.systemGreen.withAlphaComponent(0.25)
+                renderer.fillColor = UIColor.systemGreen.withAlphaComponent(0.3)
                 // 绿色边框
                 renderer.strokeColor = UIColor.systemGreen
-                renderer.lineWidth = 2
-                print("✅ TerritoryMapView: 渲染多边形 - 绿色")
+                renderer.lineWidth = 3
+
+                print("✅ 多边形渲染器配置完成 - 填充色: 绿色(0.3透明度), 边框: 绿色 3pt")
                 return renderer
             }
 
             // 处理折线覆盖物（边界线）
             if let polyline = overlay as? MKPolyline {
+                print("🎨 创建折线渲染器")
                 let renderer = MKPolylineRenderer(polyline: polyline)
+
                 // 绿色轨迹
                 renderer.strokeColor = UIColor.systemGreen
-                renderer.lineWidth = 4
+                renderer.lineWidth = 5
                 renderer.lineCap = .round
                 renderer.lineJoin = .round
-                print("✅ TerritoryMapView: 渲染折线 - 绿色")
+
+                print("✅ 折线渲染器配置完成 - 颜色: 绿色, 宽度: 5pt")
                 return renderer
             }
 
+            print("⚠️ 未识别的覆盖物类型")
             return MKOverlayRenderer(overlay: overlay)
         }
 
