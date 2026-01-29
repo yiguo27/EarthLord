@@ -43,13 +43,15 @@ enum ItemFilterCategory: String, CaseIterable {
 }
 
 struct BackpackView: View {
+    // MARK: - Observed Objects
+
+    /// 背包管理器
+    @ObservedObject private var inventoryManager = InventoryManager.shared
+
     // MARK: - State
 
-    /// 背包物品数据
-    @State private var backpackItems: [BackpackItem] = MockExplorationData.mockBackpackItems
-
     /// 筛选后的物品列表
-    @State private var filteredItems: [BackpackItem] = MockExplorationData.mockBackpackItems
+    @State private var filteredItems: [BackpackItem] = []
 
     /// 当前选中的分类筛选
     @State private var selectedCategory: ItemFilterCategory = .all
@@ -123,12 +125,19 @@ struct BackpackView: View {
         .onChange(of: selectedCategory) { _ in
             applyFilter()
         }
-        .onAppear {
+        .onChange(of: inventoryManager.items) { _ in
+            applyFilter()
             calculateCurrentCapacity()
 
             // 容量进度条动画
             withAnimation(.spring(response: 0.8, dampingFraction: 0.7).delay(0.2)) {
                 animatedCapacity = Double(currentCapacity)
+            }
+        }
+        .onAppear {
+            // 加载背包数据
+            Task {
+                await inventoryManager.loadInventory()
             }
         }
     }
@@ -305,24 +314,24 @@ struct BackpackView: View {
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             // 图标
-            Image(systemName: backpackItems.isEmpty ? "backpack" : "magnifyingglass")
+            Image(systemName: inventoryManager.items.isEmpty ? "backpack" : "magnifyingglass")
                 .font(.system(size: 60))
                 .foregroundColor(ApocalypseTheme.textMuted)
 
             // 主标题
-            Text(backpackItems.isEmpty ? "背包空空如也" : "没有找到相关物品")
+            Text(inventoryManager.items.isEmpty ? "背包空空如也" : "没有找到相关物品")
                 .font(.system(size: 20, weight: .bold))
                 .foregroundColor(ApocalypseTheme.textPrimary)
 
             // 副标题
-            Text(backpackItems.isEmpty ? "去探索收集物资吧" : "尝试调整搜索或筛选条件")
+            Text(inventoryManager.items.isEmpty ? "去探索收集物资吧" : "尝试调整搜索或筛选条件")
                 .font(.system(size: 15))
                 .foregroundColor(ApocalypseTheme.textMuted)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
 
             // 如果背包完全为空，显示探索提示
-            if backpackItems.isEmpty {
+            if inventoryManager.items.isEmpty {
                 VStack(spacing: 12) {
                     HStack(spacing: 8) {
                         Image(systemName: "map.fill")
@@ -546,7 +555,7 @@ struct BackpackView: View {
 
     /// 应用筛选
     private func applyFilter() {
-        var items = backpackItems
+        var items = inventoryManager.items
 
         // 分类筛选
         if selectedCategory != .all {
@@ -577,7 +586,7 @@ struct BackpackView: View {
     private func calculateCurrentCapacity() {
         // 根据物品总重量或数量计算容量
         // 这里简化为计算物品种类数量
-        currentCapacity = min(backpackItems.count * 7, maxCapacity)
+        currentCapacity = min(inventoryManager.items.count * 7, maxCapacity)
     }
 }
 

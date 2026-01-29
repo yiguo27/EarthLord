@@ -14,6 +14,8 @@ struct MapTabView: View {
 
     @ObservedObject private var languageManager = LanguageManager.shared
     @ObservedObject private var territoryManager = TerritoryManager.shared
+    @ObservedObject private var explorationManager = ExplorationManager()
+    @ObservedObject private var inventoryManager = InventoryManager.shared
 
     /// 定位管理器（通过环境对象注入，与全局共享同一实例）
     @EnvironmentObject var locationManager: LocationManager
@@ -48,8 +50,8 @@ struct MapTabView: View {
     @State private var collisionWarningLevel: WarningLevel = .safe
 
     // MARK: - 探索功能状态
-    @State private var isExploring = false
     @State private var showExplorationResult = false
+    @State private var explorationResult: (tier: RewardTier, items: [RewardItem], sessionData: ExplorationSessionData)?
 
     // MARK: - Computed Properties
 
@@ -530,28 +532,44 @@ struct MapTabView: View {
         }) {
             HStack(spacing: 8) {
                 // 图标
-                if isExploring {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(0.8)
+                if explorationManager.isExploring {
+                    Image(systemName: "stop.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
                 } else {
                     Image(systemName: "binoculars.fill")
                         .font(.system(size: 16, weight: .semibold))
                 }
 
-                // 文字
-                Text(isExploring ? "探索中..." : languageManager.localizedString("探索"))
-                    .font(.system(size: 14, weight: .semibold))
+                // 文字和时长信息
+                VStack(spacing: 2) {
+                    Text(explorationManager.isExploring ? "结束探索" : languageManager.localizedString("探索"))
+                        .font(.system(size: 14, weight: .semibold))
+
+                    if explorationManager.isExploring {
+                        Text(String(format: "%d米 · %d秒", Int(explorationManager.currentDistance), explorationManager.currentDuration))
+                            .font(.system(size: 10))
+                            .opacity(0.9)
+                    }
+                }
             }
             .foregroundColor(.white)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(isExploring ? Color.gray : ApocalypseTheme.primary)
+            .background(explorationManager.isExploring ? ApocalypseTheme.danger : ApocalypseTheme.primary)
             .clipShape(Capsule())
             .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
         }
-        .disabled(isExploring)
         .opacity(locationManager.isAuthorized ? 1 : 0)
+        .sheet(isPresented: $showExplorationResult) {
+            if let result = explorationResult {
+                ExplorationResultView(
+                    distance: result.sessionData.distance,
+                    duration: result.sessionData.duration,
+                    tier: result.tier,
+                    items: result.items
+                )
+            }
+        }
     }
 
     // MARK: - Methods
@@ -605,20 +623,89 @@ struct MapTabView: View {
 
     /// 执行探索功能
     private func performExploration() {
-        // 设置为探索中状态
-        isExploring = true
+        if explorationManager.isExploring {
+            // 结束探索
+            guard let sessionData = explorationManager.stopExploration() else {
+                print("❌ 探索数据不完整")
+                return
+            }
 
-        print("🔍 开始探索附近区域...")
+            // 检查距离是否达到最低要求
+            guard sessionData.distance >= 200 else {
+                print("⚠️ 探索距离不足200米，无奖励")
+                // TODO: 显示提示"探索距离不足，至少需要200米"
+                return
+            }
 
-        // 模拟探索过程（1.5秒）
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            // 探索完成
-            isExploring = false
-            print("✅ 探索完成，显示结果")
+            print("🔍 探索完成，开始结算...")
 
-            // 显示探索结果弹窗
-            showExplorationResult = true
+            // 异步处理探索结算
+            Task {
+                do {
+                    // 1. 生成奖励
+                    let (tier, items) = RewardGenerator.shared.generateReward(for: sessionData.distance)
+                    print("🎁 生成奖励 - 等级: \(tier.displayName), 物品数: \(items.count)")
+
+                    // 2. 保存探索会话到数据库
+                    try await saveExplorationSession(sessionData: sessionData, tier: tier, items: items)
+
+                    // 3. 添加物品到背包
+                    try await inventoryManager.addItems(items)
+                    print("📦 物品已添加到背包")
+
+                    // 4. 显示结果
+                    await MainActor.run {
+                        self.explorationResult = (tier, items, sessionData)
+                        self.showExplorationResult = true
+                    }
+                } catch {
+                    print("❌ 探索结算失败: \(error.localizedDescription)")
+                    // TODO: 显示错误提示
+                }
+            }
+        } else {
+            // 开始探索
+            explorationManager.startExploration()
         }
+    }
+
+    /// 保存探索会话到数据库
+    private func saveExplorationSession(
+        sessionData: ExplorationSessionData,
+        tier: RewardTier,
+        items: [RewardItem]
+    ) async throws {
+        guard let userId = currentUserId else {
+            throw NSError(domain: "MapTabView", code: -1, userInfo: [NSLocalizedDescriptionKey: "用户未登录"])
+        }
+
+        // 将物品列表转换为JSON
+        let itemsData = try JSONEncoder().encode(items)
+        let itemsJson = String(data: itemsData, encoding: .utf8) ?? "[]"
+
+        // 构造会话数据
+        let session: [String: Any] = [
+            "user_id": userId,
+            "start_time": ISO8601DateFormatter().string(from: sessionData.startTime),
+            "end_time": ISO8601DateFormatter().string(from: sessionData.endTime),
+            "duration": sessionData.duration,
+            "start_lat": sessionData.startLocation?.latitude as Any,
+            "start_lng": sessionData.startLocation?.longitude as Any,
+            "end_lat": sessionData.endLocation?.latitude as Any,
+            "end_lng": sessionData.endLocation?.longitude as Any,
+            "total_distance": sessionData.distance,
+            "reward_tier": tier.rawValue,
+            "items_rewarded": itemsJson,
+            "status": "completed"
+        ]
+
+        // 插入数据库
+        try await supabase
+            .from("exploration_sessions")
+            .insert(session)
+            .execute()
+
+        print("💾 探索会话已保存到数据库")
     }
 
     // MARK: - Day 19: Collision Detection Methods

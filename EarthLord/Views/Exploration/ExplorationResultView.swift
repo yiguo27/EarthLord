@@ -11,8 +11,17 @@ import SwiftUI
 struct ExplorationResultView: View {
     // MARK: - Properties
 
-    /// 探索结果数据
-    let result: ExplorationResult
+    /// 行走距离（米）
+    let distance: Double
+
+    /// 探索时长（秒）
+    let duration: Int
+
+    /// 奖励等级
+    let tier: RewardTier
+
+    /// 获得的物品
+    let items: [RewardItem]
 
     /// 是否失败（可选）
     var isFailed: Bool = false
@@ -30,9 +39,7 @@ struct ExplorationResultView: View {
 
     /// 数字动画值
     @State private var animatedDistance: Double = 0
-    @State private var animatedArea: Double = 0
-    @State private var animatedTotalDistance: Double = 0
-    @State private var animatedTotalArea: Double = 0
+    @State private var animatedDuration: Double = 0
 
     /// 奖励物品显示状态
     @State private var rewardItemsVisible: [Bool] = []
@@ -85,7 +92,7 @@ struct ExplorationResultView: View {
         }
         .onAppear {
             // 初始化奖励物品可见状态
-            rewardItemsVisible = Array(repeating: false, count: result.sessionItemsFound.count)
+            rewardItemsVisible = Array(repeating: false, count: items.count)
 
             // 页面内容渐入
             withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.1)) {
@@ -94,17 +101,12 @@ struct ExplorationResultView: View {
 
             // 数字跳动动画
             withAnimation(.easeOut(duration: 1.0).delay(0.5)) {
-                animatedDistance = result.sessionDistance
-                animatedArea = result.sessionArea
-            }
-
-            withAnimation(.easeOut(duration: 1.2).delay(0.6)) {
-                animatedTotalDistance = result.totalDistance
-                animatedTotalArea = result.totalArea
+                animatedDistance = distance
+                animatedDuration = Double(duration)
             }
 
             // 奖励物品依次出现
-            for (index, _) in result.sessionItemsFound.enumerated() {
+            for (index, _) in items.enumerated() {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 + Double(index) * 0.2) {
                     withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                         if index < rewardItemsVisible.count {
@@ -269,23 +271,25 @@ struct ExplorationResultView: View {
 
                 // 统计数据
                 VStack(spacing: 16) {
-                    // 行走距离（使用动画值）
-                    statisticRow(
-                        icon: "figure.walk",
-                        title: "行走距离",
-                        sessionValue: formatDistance(animatedDistance),
-                        totalValue: formatDistance(animatedTotalDistance),
-                        rank: result.distanceRank
-                    )
+                    // 行走距离
+                    HStack(spacing: 12) {
+                        Image(systemName: "figure.walk")
+                            .font(.system(size: 16))
+                            .foregroundColor(ApocalypseTheme.info)
+                            .frame(width: 24)
 
-                    // 探索面积（使用动画值）
-                    statisticRow(
-                        icon: "square.grid.3x3.fill",
-                        title: "探索面积",
-                        sessionValue: formatArea(animatedArea),
-                        totalValue: formatArea(animatedTotalArea),
-                        rank: result.areaRank
-                    )
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("行走距离")
+                                .font(.system(size: 14))
+                                .foregroundColor(ApocalypseTheme.textSecondary)
+
+                            Text(formatDistance(animatedDistance))
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(ApocalypseTheme.textPrimary)
+                        }
+
+                        Spacer()
+                    }
 
                     // 探索时长
                     HStack(spacing: 12) {
@@ -299,12 +303,40 @@ struct ExplorationResultView: View {
                                 .font(.system(size: 14))
                                 .foregroundColor(ApocalypseTheme.textSecondary)
 
-                            Text(formatDuration(result.sessionDuration))
+                            Text(formatDuration(Int(animatedDuration)))
                                 .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(ApocalypseTheme.textPrimary)
                         }
 
                         Spacer()
+                    }
+
+                    // 奖励等级
+                    HStack(spacing: 12) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(.orange)
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("奖励等级")
+                                .font(.system(size: 14))
+                                .foregroundColor(ApocalypseTheme.textSecondary)
+
+                            Text(tier.displayName)
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(ApocalypseTheme.textPrimary)
+                        }
+
+                        Spacer()
+
+                        Text(tier.description)
+                            .font(.system(size: 12))
+                            .foregroundColor(ApocalypseTheme.textSecondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(ApocalypseTheme.primary.opacity(0.15))
+                            .cornerRadius(8)
                     }
                 }
             }
@@ -404,7 +436,7 @@ struct ExplorationResultView: View {
 
                 // 物品列表（带动画）
                 VStack(spacing: 12) {
-                    ForEach(Array(result.sessionItemsFound.enumerated()), id: \.element.id) { index, reward in
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, reward in
                         if let definition = MockExplorationData.getItemDefinition(by: reward.itemId) {
                             if index < rewardItemsVisible.count && rewardItemsVisible[index] {
                                 rewardItemRow(definition: definition, reward: reward, isVisible: true)
@@ -439,7 +471,7 @@ struct ExplorationResultView: View {
     }
 
     /// 奖励物品行
-    private func rewardItemRow(definition: ItemDefinition, reward: ItemReward, isVisible: Bool) -> some View {
+    private func rewardItemRow(definition: ItemDefinition, reward: RewardItem, isVisible: Bool) -> some View {
         HStack(spacing: 14) {
             // 物品图标
             Image(systemName: definition.iconName)
