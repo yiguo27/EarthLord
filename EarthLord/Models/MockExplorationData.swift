@@ -103,7 +103,7 @@ enum ItemRarity: Int, Codable {
 }
 
 /// 背包物品（用户拥有的物品实例）
-struct BackpackItem: Identifiable, Codable {
+struct BackpackItem: Identifiable, Codable, Equatable {
     let id: String
     let itemId: String                // 物品定义ID（关联 ItemDefinition）
     var quantity: Int                 // 数量
