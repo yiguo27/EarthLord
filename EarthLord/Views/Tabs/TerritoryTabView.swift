@@ -19,40 +19,42 @@ struct TerritoryTabView: View {
     @State private var showError = false
 
     var body: some View {
-        ZStack {
-            // 背景色
-            ApocalypseTheme.background
-                .ignoresSafeArea()
+        NavigationStack {
+            ZStack {
+                // 背景色
+                ApocalypseTheme.background
+                    .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                // 顶部标题栏
-                headerView
+                VStack(spacing: 0) {
+                    // 顶部标题栏
+                    headerView
 
-                // 主内容区域
-                if isLoading {
-                    loadingView
-                } else if myTerritories.isEmpty {
-                    emptyStateView
-                } else {
-                    territoryListView
+                    // 主内容区域
+                    if isLoading {
+                        loadingView
+                    } else if myTerritories.isEmpty {
+                        emptyStateView
+                    } else {
+                        territoryListView
+                    }
                 }
             }
-        }
-        .onAppear {
-            loadTerritories()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: TerritoryManager.territoryUploadedNotification)) { _ in
-            // 收到领地上传成功的通知，自动刷新列表
-            loadTerritories()
-        }
-        .alert("错误", isPresented: $showError) {
-            Button("确定", role: .cancel) {
-                showError = false
-                errorMessage = nil
+            .onAppear {
+                loadTerritories()
             }
-        } message: {
-            if let error = errorMessage {
-                Text(error)
+            .onReceive(NotificationCenter.default.publisher(for: TerritoryManager.territoryUploadedNotification)) { _ in
+                // 收到领地上传成功的通知，自动刷新列表
+                loadTerritories()
+            }
+            .alert("错误", isPresented: $showError) {
+                Button("确定", role: .cancel) {
+                    showError = false
+                    errorMessage = nil
+                }
+            } message: {
+                if let error = errorMessage {
+                    Text(error)
+                }
             }
         }
     }
@@ -147,7 +149,10 @@ struct TerritoryTabView: View {
         ScrollView {
             LazyVStack(spacing: 12) {
                 ForEach(myTerritories) { territory in
-                    TerritoryCardView(territory: territory)
+                    NavigationLink(destination: TerritoryDetailView(territory: territory)) {
+                        TerritoryCardView(territory: territory)
+                    }
+                    .buttonStyle(PlainButtonStyle()) // 防止按钮默认样式影响卡片外观
                 }
             }
             .padding(.horizontal, 16)

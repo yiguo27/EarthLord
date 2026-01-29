@@ -238,6 +238,35 @@ final class TerritoryManager: ObservableObject {
         }
     }
 
+    /// 删除领地（软删除：将 is_active 设为 false）
+    func deleteTerritory(id: String) async throws {
+        print("🗑️ TerritoryManager: 开始删除领地 \(id)")
+
+        // 获取当前用户 ID
+        guard let userId = try? await supabase.auth.session.user.id else {
+            throw NSError(domain: "TerritoryManager", code: -2, userInfo: [NSLocalizedDescriptionKey: "用户未登录"])
+        }
+
+        do {
+            // 软删除：将 is_active 设为 false
+            try await supabase
+                .from("territories")
+                .update(["is_active": false])
+                .eq("id", value: id)
+                .eq("user_id", value: userId.uuidString) // 确保只能删除自己的领地
+                .execute()
+
+            print("✅ TerritoryManager: 成功删除领地 \(id)")
+
+            // 发送通知，让领地列表页面刷新
+            NotificationCenter.default.post(name: Self.territoryUploadedNotification, object: nil)
+        } catch {
+            let errorMsg = "删除领地失败: \(error.localizedDescription)"
+            print("❌ TerritoryManager: \(errorMsg)")
+            throw error
+        }
+    }
+
     // MARK: - 碰撞检测算法
 
     /// 射线法判断点是否在多边形内
