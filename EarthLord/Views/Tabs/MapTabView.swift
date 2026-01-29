@@ -199,7 +199,7 @@ struct MapTabView: View {
     private var mapContentView: some View {
         ZStack {
             if locationManager.isAuthorized {
-                // 已授权：显示地图（包含轨迹渲染）
+                // 已授权：显示地图（包含轨迹渲染 + 其他领地黄色显示）
                 MapViewRepresentable(
                     userLocation: $userLocation,
                     hasLocatedUser: $hasLocatedUser,
@@ -207,7 +207,9 @@ struct MapTabView: View {
                     pathUpdateVersion: locationManager.pathUpdateVersion,
                     isTracking: locationManager.isTracking,
                     isPathClosed: locationManager.isPathClosed,
-                    territoryValidationPassed: locationManager.territoryValidationPassed
+                    territoryValidationPassed: locationManager.territoryValidationPassed,
+                    otherTerritories: territoryManager.territories,  // 🟨 传递所有领地数据
+                    currentUserId: currentUserId                      // 🟨 传递当前用户ID用于过滤
                 )
                 .ignoresSafeArea(edges: .bottom)
             } else if locationManager.isDenied {

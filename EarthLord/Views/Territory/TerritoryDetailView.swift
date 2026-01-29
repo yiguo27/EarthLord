@@ -214,7 +214,7 @@ struct TerritoryDetailView: View {
         return formatter.string(from: date)
     }
 
-    /// 计算区域范围
+    /// 计算区域范围（精准聚焦领地）
     static func calculateRegion(from coordinates: [CLLocationCoordinate2D]) -> MKCoordinateRegion {
         guard !coordinates.isEmpty else {
             return MKCoordinateRegion(
@@ -223,12 +223,15 @@ struct TerritoryDetailView: View {
             )
         }
 
-        var minLat = coordinates[0].latitude
-        var maxLat = coordinates[0].latitude
-        var minLon = coordinates[0].longitude
-        var maxLon = coordinates[0].longitude
+        // ⭐ 先转换为 GCJ-02 坐标（中国地图偏移校准）
+        let gcj02Coords = CoordinateConverter.wgs84ToGcj02(coordinates)
 
-        for coord in coordinates {
+        var minLat = gcj02Coords[0].latitude
+        var maxLat = gcj02Coords[0].latitude
+        var minLon = gcj02Coords[0].longitude
+        var maxLon = gcj02Coords[0].longitude
+
+        for coord in gcj02Coords {
             minLat = min(minLat, coord.latitude)
             maxLat = max(maxLat, coord.latitude)
             minLon = min(minLon, coord.longitude)
@@ -240,10 +243,18 @@ struct TerritoryDetailView: View {
             longitude: (minLon + maxLon) / 2
         )
 
+        // ⭐ 精准模式：只增加 20% 边距（原来是 50%）
+        // 确保领地占据大部分屏幕，位置更精准
+        let latDelta = max((maxLat - minLat) * 1.2, 0.002) // 最小 200 米范围
+        let lonDelta = max((maxLon - minLon) * 1.2, 0.002)
+
         let span = MKCoordinateSpan(
-            latitudeDelta: (maxLat - minLat) * 1.5, // 增加 50% 边距
-            longitudeDelta: (maxLon - minLon) * 1.5
+            latitudeDelta: latDelta,
+            longitudeDelta: lonDelta
         )
+
+        print("📍 精准定位：中心点 = (\(center.latitude), \(center.longitude))")
+        print("📍 缩放范围：latΔ = \(latDelta), lonΔ = \(lonDelta)")
 
         return MKCoordinateRegion(center: center, span: span)
     }

@@ -12,7 +12,7 @@ import MapKit
 // MARK: - MapViewRepresentable
 
 /// 地图视图包装器
-/// 功能：显示苹果地图、应用末世滤镜、处理用户位置更新、自动居中、轨迹渲染、验证结果变色、多边形填充
+/// 功能：显示苹果地图、应用末世滤镜、处理用户位置更新、自动居中、轨迹渲染、验证结果变色、多边形填充、显示其他领地
 struct MapViewRepresentable: UIViewRepresentable {
 
     // MARK: - Binding Properties
@@ -39,6 +39,12 @@ struct MapViewRepresentable: UIViewRepresentable {
 
     /// 领地验证是否通过（用于确定轨迹颜色：通过=绿色，失败=红色）
     var territoryValidationPassed: Bool = false
+
+    /// 所有其他用户的领地数据（用于在地图上显示黄色领地）
+    var otherTerritories: [Territory] = []
+
+    /// 当前用户 ID（用于过滤自己的领地）
+    var currentUserId: String?
 
     // MARK: - UIViewRepresentable Methods
 
@@ -85,6 +91,13 @@ struct MapViewRepresentable: UIViewRepresentable {
             context.coordinator.lastClosedState = isPathClosed
             context.coordinator.lastValidationState = territoryValidationPassed
             updateTrackingPath(on: uiView, coordinator: context.coordinator)
+        }
+
+        // ⭐ 更新其他领地显示（当领地数据变化时）
+        let territoriesCount = otherTerritories.count
+        if context.coordinator.lastTerritoriesCount != territoriesCount {
+            context.coordinator.lastTerritoriesCount = territoriesCount
+            updateOtherTerritories(on: uiView, coordinator: context.coordinator)
         }
     }
 
@@ -145,6 +158,67 @@ struct MapViewRepresentable: UIViewRepresentable {
         print("🗺️ 更新轨迹：\(trackingPath.count) 个点，闭环状态：\(isPathClosed)，验证通过：\(territoryValidationPassed)")
     }
 
+    /// 更新其他用户的领地显示（黄色覆盖物）
+    /// - Parameters:
+    ///   - mapView: 地图视图
+    ///   - coordinator: 协调器
+    private func updateOtherTerritories(on mapView: MKMapView, coordinator: Coordinator) {
+        print("\n🟨 ========== 开始更新其他领地显示 ==========")
+
+        // 移除旧的其他领地覆盖物（使用特殊标记识别）
+        let existingTerritoryOverlays = mapView.overlays.filter { overlay in
+            if let polyline = overlay as? MKPolyline {
+                return polyline.title == "OtherTerritory"
+            }
+            if let polygon = overlay as? MKPolygon {
+                return polygon.title == "OtherTerritory"
+            }
+            return false
+        }
+        mapView.removeOverlays(existingTerritoryOverlays)
+        print("🗑️ 移除旧的其他领地覆盖物: \(existingTerritoryOverlays.count) 个")
+
+        // 过滤掉当前用户的领地，只显示其他用户的
+        let displayTerritories: [Territory]
+        if let userId = currentUserId {
+            displayTerritories = otherTerritories.filter { $0.userId.lowercased() != userId.lowercased() }
+        } else {
+            displayTerritories = otherTerritories
+        }
+
+        print("📊 准备显示 \(displayTerritories.count) 个其他用户的领地")
+
+        // 为每个其他领地添加黄色覆盖物
+        for territory in displayTerritories {
+            let coordinates = territory.toCoordinates()
+            guard coordinates.count >= 3 else {
+                print("⚠️ 领地 \(territory.id.prefix(8)) 坐标不足，跳过")
+                continue
+            }
+
+            // 转换为 GCJ-02 坐标
+            let gcj02Coordinates = CoordinateConverter.wgs84ToGcj02(coordinates)
+
+            // 创建黄色多边形填充
+            let polygon = MKPolygon(coordinates: gcj02Coordinates, count: gcj02Coordinates.count)
+            polygon.title = "OtherTerritory"  // 标记为其他领地
+            polygon.subtitle = territory.id   // 存储领地 ID
+
+            // 创建黄色折线边界
+            let polyline = MKPolyline(coordinates: gcj02Coordinates, count: gcj02Coordinates.count)
+            polyline.title = "OtherTerritory"  // 标记为其他领地
+            polyline.subtitle = territory.id   // 存储领地 ID
+
+            // 先添加多边形（下层），再添加折线（上层）
+            mapView.addOverlay(polygon, level: .aboveRoads)
+            mapView.addOverlay(polyline, level: .aboveRoads)
+
+            print("🟨 添加其他领地: \(territory.id.prefix(8))，\(gcj02Coordinates.count) 个点")
+        }
+
+        print("🟨 ========== 完成更新其他领地显示 ==========\n")
+    }
+
     // MARK: - Coordinator
 
     /// 地图代理协调器
@@ -167,6 +241,9 @@ struct MapViewRepresentable: UIViewRepresentable {
 
         /// 上次验证状态（用于检测验证状态变化，触发轨迹颜色更新）
         var lastValidationState: Bool = false
+
+        /// 上次其他领地数量（用于检测领地数据变化）
+        var lastTerritoriesCount: Int = 0
 
         // MARK: - Initialization
 
@@ -209,14 +286,24 @@ struct MapViewRepresentable: UIViewRepresentable {
             }
         }
 
-        /// ⭐ 关键方法：为覆盖物提供渲染器（轨迹线样式 + 多边形填充）
+        /// ⭐ 关键方法：为覆盖物提供渲染器（轨迹线样式 + 多边形填充 + 其他领地黄色显示）
         /// 注意：必须实现此方法，否则轨迹添加了也看不见！
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             // 处理折线覆盖物（轨迹线）
             if let polyline = overlay as? MKPolyline {
                 let renderer = MKPolylineRenderer(polyline: polyline)
 
-                // ⭐ 关键：根据闭环状态和验证结果设置轨迹颜色
+                // 🟨 检查是否是其他领地的折线（通过 title 标识）
+                if polyline.title == "OtherTerritory" {
+                    // 其他用户的领地：黄色边界
+                    renderer.strokeColor = UIColor.systemYellow
+                    renderer.lineWidth = 4
+                    renderer.lineCap = .round
+                    renderer.lineJoin = .round
+                    return renderer
+                }
+
+                // ⭐ 关键：根据闭环状态和验证结果设置自己的轨迹颜色
                 if parent.isPathClosed {
                     if parent.territoryValidationPassed {
                         // 验证通过：绿色轨迹
@@ -241,7 +328,16 @@ struct MapViewRepresentable: UIViewRepresentable {
             if let polygon = overlay as? MKPolygon {
                 let renderer = MKPolygonRenderer(polygon: polygon)
 
-                // 半透明绿色填充（只在验证通过时显示）
+                // 🟨 检查是否是其他领地的多边形（通过 title 标识）
+                if polygon.title == "OtherTerritory" {
+                    // 其他用户的领地：半透明黄色填充
+                    renderer.fillColor = UIColor.systemYellow.withAlphaComponent(0.2)
+                    renderer.strokeColor = UIColor.systemYellow
+                    renderer.lineWidth = 2
+                    return renderer
+                }
+
+                // 自己的领地：半透明绿色填充（只在验证通过时显示）
                 renderer.fillColor = UIColor.systemGreen.withAlphaComponent(0.25)
                 // 绿色边框
                 renderer.strokeColor = UIColor.systemGreen
@@ -275,6 +371,8 @@ struct MapViewRepresentable: UIViewRepresentable {
         pathUpdateVersion: 0,
         isTracking: false,
         isPathClosed: false,
-        territoryValidationPassed: false
+        territoryValidationPassed: false,
+        otherTerritories: [],
+        currentUserId: nil
     )
 }
