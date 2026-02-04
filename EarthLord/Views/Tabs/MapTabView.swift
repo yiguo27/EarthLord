@@ -8,6 +8,7 @@
 import SwiftUI
 import CoreLocation
 import Auth
+import Supabase
 
 struct MapTabView: View {
     // MARK: - Observed Objects
@@ -53,11 +54,25 @@ struct MapTabView: View {
     @State private var showExplorationResult = false
     @State private var explorationResult: (tier: RewardTier, items: [RewardItem], sessionData: ExplorationSessionData)?
 
+    // MARK: - POI 搜刮状态
+    @State private var searchedPOIs: [SearchedPOI] = []
+    @State private var proximityPOI: SearchedPOI?
+    @State private var showProximitySheet = false
+    @State private var showScavengeResultSheet = false
+    @State private var scavengeResults: [ScavengeResult] = []
+    @State private var isScavenging = false
+
     // MARK: - Computed Properties
 
     /// 当前用户 ID（从 AuthManager 获取）
     private var currentUserId: String? {
         AuthManager.shared.currentUser?.id.uuidString
+    }
+
+    /// 位置变化标识（米级精度，用于触发 POI 距离检测）
+    private var locationKey: String {
+        guard let loc = userLocation else { return "" }
+        return String(format: "%.5f,%.5f", loc.latitude, loc.longitude)
     }
 
     // MARK: - Body
@@ -168,9 +183,30 @@ struct MapTabView: View {
                 uploadMessage = nil
             }
         }
-        // 探索结果弹窗
-        .sheet(isPresented: $showExplorationResult) {
-            ExplorationResultView(result: MockExplorationData.mockExplorationResult)
+        // POI 接近弹窗（探索中走到 POI 50m 范围内自动触发）
+        .sheet(isPresented: $showProximitySheet) {
+            if let poi = proximityPOI {
+                POIProximitySheet(
+                    poi: poi,
+                    isLoading: isScavenging,
+                    onScavenge: { scavengePOI() },
+                    onDismiss: { showProximitySheet = false }
+                )
+            }
+        }
+        // POI 搜刮结果弹窗（AI 生成物品展示）
+        .sheet(isPresented: $showScavengeResultSheet) {
+            if let poi = proximityPOI {
+                POIScavengeResultSheet(
+                    poi: poi,
+                    results: scavengeResults,
+                    onConfirm: { confirmScavenge() }
+                )
+            }
+        }
+        // 位置变化时检测是否接近 POI
+        .onChange(of: locationKey) { _ in
+            checkPOIProximity()
         }
     }
 
@@ -227,7 +263,8 @@ struct MapTabView: View {
                     isPathClosed: locationManager.isPathClosed,
                     territoryValidationPassed: locationManager.territoryValidationPassed,
                     otherTerritories: territoryManager.territories,  // 🟨 传递所有领地数据
-                    currentUserId: currentUserId                      // 🟨 传递当前用户ID用于过滤
+                    currentUserId: currentUserId,                     // 🟨 传递当前用户ID用于过滤
+                    searchedPOIs: searchedPOIs                        // 📍 传递附近POI用于地图标记
                 )
                 .ignoresSafeArea(edges: .bottom)
             } else if locationManager.isDenied {
@@ -627,8 +664,13 @@ struct MapTabView: View {
             // 结束探索
             guard let sessionData = explorationManager.stopExploration() else {
                 print("❌ 探索数据不完整")
+                // 清除路径显示
+                locationManager.clearPath()
                 return
             }
+
+            // 清除路径显示
+            locationManager.clearPath()
 
             // 检查距离是否达到最低要求
             guard sessionData.distance >= 200 else {
@@ -664,8 +706,23 @@ struct MapTabView: View {
                 }
             }
         } else {
-            // 开始探索
+            // 开始探索 - 同时启动路径追踪以显示行走轨迹
+            locationManager.startPathTracking()
             explorationManager.startExploration()
+            print("🟢 探索开始，路径追踪已启动")
+
+            // 搜索附近 POI（用于搜刮触发）
+            if let location = userLocation {
+                Task {
+                    do {
+                        let pois = try await POISearchManager.shared.searchNearbyPOIs(at: location)
+                        searchedPOIs = pois
+                        print("📍 搜索到 \(pois.count) 个附近 POI")
+                    } catch {
+                        print("⚠️ POI 搜索失败: \(error.localizedDescription)")
+                    }
+                }
+            }
         }
     }
 
@@ -684,20 +741,35 @@ struct MapTabView: View {
         let itemsJson = String(data: itemsData, encoding: .utf8) ?? "[]"
 
         // 构造会话数据
-        let session: [String: Any] = [
-            "user_id": userId,
-            "start_time": ISO8601DateFormatter().string(from: sessionData.startTime),
-            "end_time": ISO8601DateFormatter().string(from: sessionData.endTime),
-            "duration": sessionData.duration,
-            "start_lat": sessionData.startLocation?.latitude as Any,
-            "start_lng": sessionData.startLocation?.longitude as Any,
-            "end_lat": sessionData.endLocation?.latitude as Any,
-            "end_lng": sessionData.endLocation?.longitude as Any,
-            "total_distance": sessionData.distance,
-            "reward_tier": tier.rawValue,
-            "items_rewarded": itemsJson,
-            "status": "completed"
-        ]
+        struct ExplorationSessionInsert: Encodable {
+            let user_id: String
+            let start_time: String
+            let end_time: String
+            let duration: TimeInterval
+            let start_lat: Double?
+            let start_lng: Double?
+            let end_lat: Double?
+            let end_lng: Double?
+            let total_distance: Double
+            let reward_tier: String
+            let items_rewarded: String
+            let status: String
+        }
+
+        let session = ExplorationSessionInsert(
+            user_id: userId,
+            start_time: ISO8601DateFormatter().string(from: sessionData.startTime),
+            end_time: ISO8601DateFormatter().string(from: sessionData.endTime),
+            duration: Double(sessionData.duration),
+            start_lat: sessionData.startLocation?.latitude,
+            start_lng: sessionData.startLocation?.longitude,
+            end_lat: sessionData.endLocation?.latitude,
+            end_lng: sessionData.endLocation?.longitude,
+            total_distance: sessionData.distance,
+            reward_tier: tier.rawValue,
+            items_rewarded: itemsJson,
+            status: "completed"
+        )
 
         // 插入数据库
         try await supabase
@@ -706,6 +778,89 @@ struct MapTabView: View {
             .execute()
 
         print("💾 探索会话已保存到数据库")
+    }
+
+    // MARK: - POI 搜刮
+
+    /// 检测用户是否接近某个未搜刮的 POI（50米范围内触发）
+    private func checkPOIProximity() {
+        guard explorationManager.isExploring,
+              let location = userLocation,
+              !showProximitySheet,
+              !showScavengeResultSheet,
+              !isScavenging else { return }
+
+        let userLoc = CLLocation(latitude: location.latitude, longitude: location.longitude)
+
+        // 找到距离最近的未搜刮 POI（≤50m）
+        var closest: (poi: SearchedPOI, distance: Double)?
+        for poi in searchedPOIs where !poi.isScavenged {
+            let poiLoc = CLLocation(latitude: poi.coordinate.latitude, longitude: poi.coordinate.longitude)
+            let dist = userLoc.distance(from: poiLoc)
+            if dist <= 50 && (closest == nil || dist < closest!.distance) {
+                closest = (poi, dist)
+            }
+        }
+
+        if let (poi, dist) = closest {
+            print("📍 接近 POI: \(poi.name)，距离 \(Int(dist))米")
+            proximityPOI = poi
+            showProximitySheet = true
+        }
+    }
+
+    /// 执行 POI 搜刮（调用 AI 生成物品）
+    private func scavengePOI() {
+        guard let poi = proximityPOI else { return }
+
+        Task {
+            await MainActor.run { isScavenging = true }
+
+            // 物品数量按危险值决定
+            let count: Int
+            switch poi.type.dangerLevel {
+            case 4: count = 4
+            case 5: count = 5
+            default: count = 3
+            }
+
+            print("🤖 开始 AI 生成物品，POI: \(poi.name)，数量: \(count)")
+            let results = await AIItemGenerator.shared.generateItems(for: poi, count: count)
+
+            await MainActor.run {
+                self.scavengeResults = results
+                self.isScavenging = false
+                self.showProximitySheet = false
+                // 短暂延迟确保 ProximitySheet 退出动画完成后再展示结果
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    self.showScavengeResultSheet = true
+                }
+            }
+        }
+    }
+
+    /// 确认搜刮结果，添加物品到库存并标记 POI 已搜刮
+    private func confirmScavenge() {
+        let results = scavengeResults
+        let poi = proximityPOI
+
+        Task {
+            do {
+                let rewardItems = results.map { $0.rewardItem }
+                try await inventoryManager.addItems(rewardItems)
+                print("📦 搜刮物品已添加到背包（\(rewardItems.count) 件）")
+            } catch {
+                print("❌ 添加物品失败: \(error.localizedDescription)")
+            }
+
+            await MainActor.run {
+                // 标记该 POI 为已搜刮
+                if let poi = poi, let idx = searchedPOIs.firstIndex(where: { $0.id == poi.id }) {
+                    searchedPOIs[idx].isScavenged = true
+                }
+                showScavengeResultSheet = false
+            }
+        }
     }
 
     // MARK: - Day 19: Collision Detection Methods

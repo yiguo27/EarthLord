@@ -19,6 +19,10 @@ struct EarthLordApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(locationManager)
+                .onAppear {
+                    // 启动玩家位置上报服务（用于附近玩家密度检测）
+                    PlayerLocationManager.shared.start(with: locationManager)
+                }
         }
     }
 }

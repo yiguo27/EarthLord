@@ -303,7 +303,7 @@ struct ExplorationResultView: View {
                                 .font(.system(size: 14))
                                 .foregroundColor(ApocalypseTheme.textSecondary)
 
-                            Text(formatDuration(Int(animatedDuration)))
+                            Text(formatDuration(animatedDuration))
                                 .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(ApocalypseTheme.textPrimary)
                         }
@@ -597,6 +597,27 @@ struct ExplorationResultView: View {
         } else {
             return String(format: "%d分钟", minutes)
         }
+    }
+}
+
+// MARK: - Convenience Initializer
+
+extension ExplorationResultView {
+    /// 从 ExplorationResult 初始化
+    init(result: ExplorationResult, isFailed: Bool = false, failureReason: String = "探索过程中遇到了危险") {
+        self.distance = result.sessionDistance
+        self.duration = Int(result.sessionDuration)
+        self.tier = .bronze // 默认等级，可以根据距离计算
+        self.items = result.sessionItemsFound.map { itemReward in
+            RewardItem(
+                id: itemReward.id,
+                itemId: itemReward.itemId,
+                quantity: itemReward.quantity,
+                quality: itemReward.quality
+            )
+        }
+        self.isFailed = isFailed
+        self.failureReason = failureReason
     }
 }
 

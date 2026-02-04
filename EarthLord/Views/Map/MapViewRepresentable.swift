@@ -9,6 +9,21 @@
 import SwiftUI
 import MapKit
 
+// MARK: - POI 注解
+
+/// POI 地图注解（探索中在地图上显示可搜刮的废墟点）
+class POIAnnotation: MKPointAnnotation {
+    let poi: SearchedPOI
+
+    init(poi: SearchedPOI) {
+        self.poi = poi
+        super.init()
+        self.coordinate = poi.coordinate
+        self.title = poi.name
+        self.subtitle = poi.type.rawValue
+    }
+}
+
 // MARK: - MapViewRepresentable
 
 /// 地图视图包装器
@@ -45,6 +60,9 @@ struct MapViewRepresentable: UIViewRepresentable {
 
     /// 当前用户 ID（用于过滤自己的领地）
     var currentUserId: String?
+
+    /// 附近可搜刮的 POI 列表（探索中在地图上显示废墟标记）
+    var searchedPOIs: [SearchedPOI] = []
 
     // MARK: - UIViewRepresentable Methods
 
@@ -98,6 +116,13 @@ struct MapViewRepresentable: UIViewRepresentable {
         if context.coordinator.lastTerritoriesCount != territoriesCount {
             context.coordinator.lastTerritoriesCount = territoriesCount
             updateOtherTerritories(on: uiView, coordinator: context.coordinator)
+        }
+
+        // ⭐ 更新 POI 废墟标记（探索中附近可搜刮地点）
+        let poiSignature = searchedPOIs.map { "\($0.id)-\($0.isScavenged)" }.joined(separator: ",")
+        if context.coordinator.lastPOISignature != poiSignature {
+            context.coordinator.lastPOISignature = poiSignature
+            updatePOIAnnotations(on: uiView)
         }
     }
 
@@ -219,6 +244,18 @@ struct MapViewRepresentable: UIViewRepresentable {
         print("🟨 ========== 完成更新其他领地显示 ==========\n")
     }
 
+    /// 更新 POI 废墟注解标记（移除已搜刮的，添加未搜刮的）
+    private func updatePOIAnnotations(on mapView: MKMapView) {
+        // 移除旧的 POI 注解
+        let existing = mapView.annotations.compactMap { $0 as? POIAnnotation }
+        mapView.removeAnnotations(existing)
+
+        // 添加未搜刮的 POI
+        let annotations = searchedPOIs.filter { !$0.isScavenged }.map { POIAnnotation(poi: $0) }
+        mapView.addAnnotations(annotations)
+        print("📍 更新 POI 标记: 显示 \(annotations.count) 个废墟点")
+    }
+
     // MARK: - Coordinator
 
     /// 地图代理协调器
@@ -244,6 +281,9 @@ struct MapViewRepresentable: UIViewRepresentable {
 
         /// 上次其他领地数量（用于检测领地数据变化）
         var lastTerritoriesCount: Int = 0
+
+        /// 上次 POI 签名（用于检测 POI 列表变化）
+        var lastPOISignature: String = ""
 
         // MARK: - Initialization
 
@@ -295,9 +335,9 @@ struct MapViewRepresentable: UIViewRepresentable {
 
                 // 🟨 检查是否是其他领地的折线（通过 title 标识）
                 if polyline.title == "OtherTerritory" {
-                    // 其他用户的领地：黄色边界
-                    renderer.strokeColor = UIColor.systemYellow
-                    renderer.lineWidth = 4
+                    // 其他用户的领地：鲜明的金黄色边界
+                    renderer.strokeColor = UIColor(red: 1.0, green: 0.8, blue: 0.0, alpha: 1.0)  // 金黄色
+                    renderer.lineWidth = 6
                     renderer.lineCap = .round
                     renderer.lineJoin = .round
                     return renderer
@@ -306,18 +346,18 @@ struct MapViewRepresentable: UIViewRepresentable {
                 // ⭐ 关键：根据闭环状态和验证结果设置自己的轨迹颜色
                 if parent.isPathClosed {
                     if parent.territoryValidationPassed {
-                        // 验证通过：绿色轨迹
-                        renderer.strokeColor = UIColor.systemGreen
+                        // 验证通过：鲜明的亮绿色轨迹
+                        renderer.strokeColor = UIColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0)  // 纯绿色
                     } else {
-                        // 验证失败：红色轨迹
-                        renderer.strokeColor = UIColor.systemRed
+                        // 验证失败：鲜明的红色轨迹
+                        renderer.strokeColor = UIColor(red: 1.0, green: 0.2, blue: 0.2, alpha: 1.0)  // 亮红色
                     }
                 } else {
-                    // 未闭环：青色轨迹（末世科技感）
-                    renderer.strokeColor = UIColor.systemCyan
+                    // 未闭环：鲜明的亮绿色轨迹（方便用户看清自己的行走路径）
+                    renderer.strokeColor = UIColor(red: 0.0, green: 1.0, blue: 0.3, alpha: 1.0)  // 亮绿色
                 }
 
-                renderer.lineWidth = 5                    // 线宽 5pt
+                renderer.lineWidth = 6                    // 加粗线宽 6pt
                 renderer.lineCap = .round                 // 圆头线帽
                 renderer.lineJoin = .round                // 圆角连接
 
@@ -330,23 +370,66 @@ struct MapViewRepresentable: UIViewRepresentable {
 
                 // 🟨 检查是否是其他领地的多边形（通过 title 标识）
                 if polygon.title == "OtherTerritory" {
-                    // 其他用户的领地：半透明黄色填充
-                    renderer.fillColor = UIColor.systemYellow.withAlphaComponent(0.2)
-                    renderer.strokeColor = UIColor.systemYellow
-                    renderer.lineWidth = 2
+                    // 其他用户的领地：半透明金黄色填充
+                    renderer.fillColor = UIColor(red: 1.0, green: 0.8, blue: 0.0, alpha: 0.3)  // 金黄色填充
+                    renderer.strokeColor = UIColor(red: 1.0, green: 0.8, blue: 0.0, alpha: 1.0)  // 金黄色边框
+                    renderer.lineWidth = 4
                     return renderer
                 }
 
-                // 自己的领地：半透明绿色填充（只在验证通过时显示）
-                renderer.fillColor = UIColor.systemGreen.withAlphaComponent(0.25)
-                // 绿色边框
-                renderer.strokeColor = UIColor.systemGreen
-                renderer.lineWidth = 2
+                // 自己的领地：半透明亮绿色填充
+                renderer.fillColor = UIColor(red: 0.0, green: 1.0, blue: 0.3, alpha: 0.3)  // 亮绿色填充
+                renderer.strokeColor = UIColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0)  // 纯绿色边框
+                renderer.lineWidth = 4
 
                 return renderer
             }
 
             return MKOverlayRenderer(overlay: overlay)
+        }
+
+        /// 为 POI 注解提供自定义标记视图（彩色圆形 + 底部三角指针）
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            guard let poiAnnotation = annotation as? POIAnnotation else { return nil }
+
+            let identifier = "POIMarker"
+            let annotationView: MKAnnotationView
+            if let reused = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) {
+                reused.annotation = poiAnnotation
+                annotationView = reused
+            } else {
+                annotationView = MKAnnotationView(annotation: poiAnnotation, reuseIdentifier: identifier)
+            }
+
+            annotationView.canShowCallout = true
+            annotationView.centerOffset = CGPoint(x: 0, y: -14)
+
+            // 用 POI 类型颜色生成圆形标记 + 底部三角指针
+            let color = UIColor(Color(hex: poiAnnotation.poi.type.colorHex))
+            let size: CGFloat = 26
+            let totalHeight = size + 10
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: totalHeight))
+            annotationView.image = renderer.image { ctx in
+                let g = ctx.cgContext
+                // 白色外圈
+                UIColor.white.setFill()
+                g.addEllipse(in: CGRect(x: 0, y: 0, width: size, height: size))
+                g.fillPath()
+                // 彩色内圈
+                color.setFill()
+                g.addEllipse(in: CGRect(x: 2.5, y: 2.5, width: size - 5, height: size - 5))
+                g.fillPath()
+                // 底部三角指针
+                let mid = size / 2
+                color.setFill()
+                g.move(to: CGPoint(x: mid - 5, y: size - 2))
+                g.addLine(to: CGPoint(x: mid + 5, y: size - 2))
+                g.addLine(to: CGPoint(x: mid, y: totalHeight - 1))
+                g.closePath()
+                g.fillPath()
+            }
+
+            return annotationView
         }
 
         /// 地图区域改变完成时调用

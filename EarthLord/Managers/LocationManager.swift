@@ -525,7 +525,7 @@ class LocationManager: NSObject, ObservableObject {
     private func validateMovementSpeed(newLocation: CLLocation) -> Bool {
         // 如果是第一个点，没有上次位置，直接通过
         guard let lastLocation = lastRecordedLocation,
-              let lastTimestamp = lastRecordedTimestamp else {
+              lastRecordedTimestamp != nil else {
             // 更新记录
             lastRecordedLocation = newLocation
             lastRecordedTimestamp = Date()
@@ -535,11 +535,11 @@ class LocationManager: NSObject, ObservableObject {
         // 计算与上一个记录点的距离（米）
         let distance = newLocation.distance(from: lastLocation)
 
-        // 计算时间差（秒）
-        let timeInterval = Date().timeIntervalSince(lastTimestamp)
+        // 计算时间差（秒）— 使用位置自身时间戳，而非墙时钟，避免 Timer 延迟导致偏差
+        let timeInterval = newLocation.timestamp.timeIntervalSince(lastLocation.timestamp)
 
-        // 防止除以零
-        guard timeInterval > 0 else {
+        // 时间间隔不足 2 秒时跳过速度校验（同一 batch 多点或极短间隔不做判断）
+        guard timeInterval >= 2.0 else {
             return true
         }
 
@@ -683,14 +683,16 @@ extension LocationManager: CLLocationManagerDelegate {
         // 获取最新的位置
         guard let location = locations.last else { return }
 
-        // ⭐ 关键：更新 currentLocation，供 Timer 采点使用
-        self.currentLocation = location
-
-        // 更新用户位置
+        // 始终更新显示位置（坐标展示、POI 近距检测等）
         DispatchQueue.main.async {
             self.userLocation = location.coordinate
             self.locationError = nil
         }
+
+        // ⭐ 关键：仅当精度 ≤ 20m 时更新采点位置
+        // 静止时 GPS 易漂移 15~30m，精度差的点会造成伪高速，必须过滤
+        guard location.horizontalAccuracy <= 20.0 else { return }
+        self.currentLocation = location
     }
 
     /// 定位失败时调用

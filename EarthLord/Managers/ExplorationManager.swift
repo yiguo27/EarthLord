@@ -33,6 +33,14 @@ class ExplorationManager: NSObject, ObservableObject {
     /// 探索结束位置
     @Published var endLocation: CLLocationCoordinate2D?
 
+    // MARK: - Density Properties (Day 22)
+
+    /// 当前探索的密度等级
+    @Published var currentDensity: PlayerDensityLevel?
+
+    /// 探索期间固定的POI列表（探索开始后不变）
+    @Published var lockedPOIs: [POI] = []
+
     // MARK: - Private Properties
 
     /// 位置管理器
@@ -75,8 +83,8 @@ class ExplorationManager: NSObject, ObservableObject {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
         locationManager.distanceFilter = 5.0 // 移动5米触发一次更新
-        locationManager.allowsBackgroundLocationUpdates = true
-        locationManager.pausesLocationUpdatesAutomatically = false
+        // 注意: allowsBackgroundLocationUpdates 需要在 startUpdatingLocation 之后设置
+        // 否则会在没有后台权限时崩溃
     }
 
     // MARK: - Public Methods
@@ -102,6 +110,12 @@ class ExplorationManager: NSObject, ObservableObject {
 
         // 开始GPS追踪
         locationManager.startUpdatingLocation()
+
+        // 在开始更新位置后，设置后台定位（需要在 Info.plist 中配置后台定位权限）
+        if Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") != nil {
+            locationManager.allowsBackgroundLocationUpdates = true
+            locationManager.pausesLocationUpdatesAutomatically = false
+        }
 
         // 开始计时器（每秒更新一次）
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -155,7 +169,25 @@ class ExplorationManager: NSObject, ObservableObject {
 
         print("✅ 探索完成 - 距离: \(Int(currentDistance))米, 时长: \(currentDuration)秒")
 
+        // 清除密度状态
+        currentDensity = nil
+        lockedPOIs = []
+
         return sessionData
+    }
+
+    /// 开始探索（带密度和POI）
+    /// - Parameters:
+    ///   - density: 玩家密度等级
+    ///   - pois: 锁定的POI列表
+    func startExploration(density: PlayerDensityLevel, pois: [POI]) {
+        // 先设置密度和POI
+        currentDensity = density
+        lockedPOIs = pois
+        print("🎯 探索初始化 - 密度: \(density.displayName), POI数量: \(pois.count)")
+
+        // 调用原有的开始探索逻辑
+        startExploration()
     }
 
     /// 取消探索（不保存数据）
@@ -171,6 +203,10 @@ class ExplorationManager: NSObject, ObservableObject {
         isExploring = false
         currentDistance = 0
         currentDuration = 0
+
+        // 清除密度状态
+        currentDensity = nil
+        lockedPOIs = []
         startTime = nil
         lastValidLocation = nil
         locationHistory.removeAll()

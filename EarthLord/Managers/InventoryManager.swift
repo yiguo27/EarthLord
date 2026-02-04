@@ -86,9 +86,8 @@ class InventoryManager: ObservableObject {
 
         do {
             // 获取当前用户ID
-            guard let userId = try await supabase.auth.session.user.id.uuidString else {
-                throw InventoryError.userNotAuthenticated
-            }
+            let session = try await supabase.auth.session
+            let userId = session.user.id.uuidString
 
             print("📦 加载背包数据 - 用户ID: \(userId)")
 
@@ -126,9 +125,8 @@ class InventoryManager: ObservableObject {
         guard !rewards.isEmpty else { return }
 
         // 获取当前用户ID
-        guard let userId = try await supabase.auth.session.user.id.uuidString else {
-            throw InventoryError.userNotAuthenticated
-        }
+        let session = try await supabase.auth.session
+        let userId = session.user.id.uuidString
 
         print("📦 添加物品到背包 - 用户ID: \(userId), 物品数: \(rewards.count)")
 
@@ -150,22 +148,27 @@ class InventoryManager: ObservableObject {
         // 1. 检查是否已存在相同物品（同item_id, 同quality）
         let qualityStr = quality?.rawValue
 
-        var query = supabase
-            .from("inventory_items")
-            .select()
-            .eq("user_id", value: userId)
-            .eq("item_id", value: itemId)
-
-        // 如果有品质，加上品质条件
+        // 查询现有物品
+        let existingItems: [DBInventoryItem]
         if let qualityStr = qualityStr {
-            query = query.eq("quality", value: qualityStr)
+            existingItems = try await supabase
+                .from("inventory_items")
+                .select()
+                .eq("user_id", value: userId)
+                .eq("item_id", value: itemId)
+                .eq("quality", value: qualityStr)
+                .execute()
+                .value
         } else {
-            query = query.is_("quality", value: "null")
+            existingItems = try await supabase
+                .from("inventory_items")
+                .select()
+                .eq("user_id", value: userId)
+                .eq("item_id", value: itemId)
+                .is("quality", value: nil)
+                .execute()
+                .value
         }
-
-        let existingItems: [DBInventoryItem] = try await query
-            .execute()
-            .value
 
         if let existingItem = existingItems.first {
             // 2. 如果存在，更新数量
@@ -173,9 +176,15 @@ class InventoryManager: ObservableObject {
 
             print("📦 更新物品数量: \(itemId) (\(existingItem.quantity) + \(quantity) = \(newQuantity))")
 
+            struct UpdateData: Encodable {
+                let quantity: Int
+                let updated_at: String
+            }
+            let updateData = UpdateData(quantity: newQuantity, updated_at: ISO8601DateFormatter().string(from: Date()))
+
             try await supabase
                 .from("inventory_items")
-                .update(["quantity": newQuantity, "updated_at": ISO8601DateFormatter().string(from: Date())])
+                .update(updateData)
                 .eq("id", value: existingItem.id)
                 .execute()
 
@@ -183,13 +192,20 @@ class InventoryManager: ObservableObject {
             // 3. 如果不存在，创建新记录
             print("📦 创建新物品: \(itemId) x\(quantity)")
 
-            let newItem: [String: Any] = [
-                "user_id": userId,
-                "item_id": itemId,
-                "quantity": quantity,
-                "quality": qualityStr as Any,
-                "obtained_at": ISO8601DateFormatter().string(from: Date())
-            ]
+            struct NewItem: Encodable {
+                let user_id: String
+                let item_id: String
+                let quantity: Int
+                let quality: String?
+                let obtained_at: String
+            }
+            let newItem = NewItem(
+                user_id: userId,
+                item_id: itemId,
+                quantity: quantity,
+                quality: qualityStr,
+                obtained_at: ISO8601DateFormatter().string(from: Date())
+            )
 
             try await supabase
                 .from("inventory_items")
@@ -203,9 +219,8 @@ class InventoryManager: ObservableObject {
     ///   - itemId: 物品ID
     ///   - quantity: 数量
     func removeItem(itemId: String, quantity: Int) async throws {
-        guard let userId = try await supabase.auth.session.user.id.uuidString else {
-            throw InventoryError.userNotAuthenticated
-        }
+        let session = try await supabase.auth.session
+        let userId = session.user.id.uuidString
 
         // 查询物品
         let existingItems: [DBInventoryItem] = try await supabase
@@ -230,9 +245,14 @@ class InventoryManager: ObservableObject {
         } else {
             // 减少数量
             let newQuantity = item.quantity - quantity
+            struct UpdateData: Encodable {
+                let quantity: Int
+                let updated_at: String
+            }
+            let updateData = UpdateData(quantity: newQuantity, updated_at: ISO8601DateFormatter().string(from: Date()))
             try await supabase
                 .from("inventory_items")
-                .update(["quantity": newQuantity, "updated_at": ISO8601DateFormatter().string(from: Date())])
+                .update(updateData)
                 .eq("id", value: item.id)
                 .execute()
         }
