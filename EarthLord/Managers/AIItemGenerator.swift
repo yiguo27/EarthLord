@@ -2,16 +2,14 @@
 //  AIItemGenerator.swift
 //  EarthLord
 //
-//  AI 物品生成器 - 调用 Edge Function 生成搜刮物品，包含映射和降级逻辑
+//  AI 物品生成器 - 直接调用 DashScope API 生成搜刮物品，包含映射和降级逻辑
 //
 
 import Foundation
-import Auth
-import Supabase
 
 // MARK: - 数据模型
 
-/// AI 生成的物品（来自 Edge Function 响应）
+/// AI 生成的物品
 struct AIGeneratedItem: Codable {
     let name: String        // AI 生成的独特名称
     let category: String    // 分类（医疗/食物/工具/武器/材料/水）
@@ -19,33 +17,34 @@ struct AIGeneratedItem: Codable {
     let story: String       // 背景故事
 }
 
-/// 发送到 Edge Function 的请求体
-struct AIGenerateRequest: Encodable {
-    let poi: POIInfo
-    let itemCount: Int
+/// DashScope API 请求体
+struct DashScopeRequest: Encodable {
+    let model: String
+    let messages: [Message]
+    let max_tokens: Int
+    let temperature: Double
 
-    struct POIInfo: Encodable {
-        let name: String
-        let type: String
-        let dangerLevel: Int
+    struct Message: Encodable {
+        let role: String
+        let content: String
     }
 }
 
-/// Edge Function 响应
-struct AIGenerateResponse: Codable {
-    let success: Bool
-    let items: [AIGeneratedItem]
-    let error: String?
+/// DashScope API 响应
+struct DashScopeResponse: Decodable {
+    let choices: [Choice]?
+    let error: ErrorInfo?
 
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.success = try container.decode(Bool.self, forKey: .success)
-        self.items = try container.decodeIfPresent([AIGeneratedItem].self, forKey: .items) ?? []
-        self.error = try container.decodeIfPresent(String.self, forKey: .error)
+    struct Choice: Decodable {
+        let message: Message
     }
 
-    enum CodingKeys: String, CodingKey {
-        case success, items, error
+    struct Message: Decodable {
+        let content: String
+    }
+
+    struct ErrorInfo: Decodable {
+        let message: String
     }
 }
 
@@ -59,7 +58,7 @@ struct ScavengeResult: Identifiable {
 // MARK: - AIItemGenerator
 
 /// AI 物品生成器
-/// 职责：调用 Edge Function 生成 AI 物品，映射到现有物品池，提供降级方案
+/// 职责：直接调用 DashScope API 生成 AI 物品，映射到现有物品池，提供降级方案
 final class AIItemGenerator {
 
     // MARK: - Singleton
@@ -70,11 +69,31 @@ final class AIItemGenerator {
 
     // MARK: - Constants
 
-    /// Edge Function URL
-    private let functionURL = "https://hrtdgvplerzybnodjqmk.supabase.co/functions/v1/generate-ai-item"
+    /// DashScope API URL（阿里云通义千问，OpenAI 兼容接口）
+    private let apiURL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"
 
-    /// Supabase anon key
-    private let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhydGRndnBsZXJ6eWJub2RqcW1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5MzU1NjksImV4cCI6MjA4MzUxMTU2OX0.Zgof7wvEDEHJUOxgJO3g3Aur-4XX9TcQGkVvRhPQ1Mk"
+    /// DashScope API Key（⚠️ 生产环境应从安全存储获取）
+    private let apiKey = "sk-1eaef36929b94b6883e8e009bedfc7f4"
+
+    /// 系统提示词
+    private let systemPrompt = """
+        你是一个末日生存游戏的物品生成器。游戏背景是丧尸末日后的世界。
+
+        根据搜刮地点生成物品列表，每个物品必须包含以下字段：
+        - name: 独特名称（15字以内），暗示前主人或物品来历
+        - category: 分类，只能从以下选择：医疗、食物、工具、武器、材料、水
+        - rarity: 稀有度，只能从以下选择：common、uncommon、rare、epic、legendary
+        - story: 背景故事（50-100字），营造末日氛围
+
+        规则：
+        1. 物品类型要与地点紧密相关（医院出医疗物品，便利店出食物和水）
+        2. 名称要有创意和画面感
+        3. 故事要简短有画面感，可以有黑色幽默
+        4. 稀有度越高，名称和故事越独特精彩
+        5. 严格按照用户提示中的稀有度分布比例生成
+
+        只返回 JSON 数组，不要其他任何内容。
+        """
 
     // MARK: - Public Methods
 
@@ -84,60 +103,110 @@ final class AIItemGenerator {
     ///   - count: 生成物品数量
     /// - Returns: 搜刮结果列表
     func generateItems(for poi: SearchedPOI, count: Int = 3) async -> [ScavengeResult] {
-        guard let aiItems = await callAI(poi: poi, count: count) else {
+        guard let aiItems = await callDashScopeAPI(poi: poi, count: count) else {
             print("[AIItemGenerator] AI 调用失败，使用降级方案")
             return generateFallbackItems(for: poi, count: count)
         }
         return mapToScavengeResults(aiItems)
     }
 
-    // MARK: - Private: AI 调用
+    // MARK: - Private: 直接调用 DashScope API
 
-    /// 调用 Edge Function
-    private func callAI(poi: SearchedPOI, count: Int) async -> [AIGeneratedItem]? {
-        let request = AIGenerateRequest(
-            poi: .init(
-                name: poi.name,
-                type: poi.type.rawValue,
-                dangerLevel: poi.type.dangerLevel
-            ),
-            itemCount: count
+    /// 直接调用 DashScope API（通义千问）
+    private func callDashScopeAPI(poi: SearchedPOI, count: Int) async -> [AIGeneratedItem]? {
+        let dangerLevel = poi.type.dangerLevel
+        let weights = getRarityWeights(dangerLevel: dangerLevel)
+
+        let userPrompt = """
+            搜刮地点：\(poi.name)（\(poi.type.rawValue)类型，危险等级 \(dangerLevel)/5）
+
+            请生成 \(count) 个物品。严格参考以下稀有度分布比例：
+            \(weights.filter { $0.value > 0 }.map { "- \($0.key): \($0.value)%" }.joined(separator: "\n"))
+
+            返回 JSON 数组，每个元素包含 name、category、rarity、story 字段。只返回数组，不要其他内容。
+            """
+
+        let request = DashScopeRequest(
+            model: "qwen-flash",
+            messages: [
+                .init(role: "system", content: systemPrompt),
+                .init(role: "user", content: userPrompt)
+            ],
+            max_tokens: 800,
+            temperature: 0.8
         )
 
         do {
-            let session = try await supabase.auth.session
-            let accessToken = session.accessToken
-
-            guard let url = URL(string: functionURL) else { return nil }
+            guard let url = URL(string: apiURL) else { return nil }
 
             var httpRequest = URLRequest(url: url)
             httpRequest.httpMethod = "POST"
-            httpRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            httpRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
             httpRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            httpRequest.setValue(anonKey, forHTTPHeaderField: "apikey")
             httpRequest.httpBody = try JSONEncoder().encode(request)
 
             let (data, response) = try await URLSession.shared.data(for: httpRequest)
 
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200 else {
-                print("[AIItemGenerator] HTTP 错误: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("[AIItemGenerator] 无效响应")
                 return nil
             }
 
-            let result = try JSONDecoder().decode(AIGenerateResponse.self, from: data)
-            guard result.success, !result.items.isEmpty else {
-                print("[AIItemGenerator] AI 返回失败: \(result.error ?? "空响应")")
+            guard httpResponse.statusCode == 200 else {
+                print("[AIItemGenerator] HTTP 错误: \(httpResponse.statusCode)")
+                if let errorText = String(data: data, encoding: .utf8) {
+                    print("[AIItemGenerator] 错误详情: \(errorText)")
+                }
                 return nil
             }
 
-            print("[AIItemGenerator] AI 成功生成 \(result.items.count) 个物品")
-            return result.items
+            let result = try JSONDecoder().decode(DashScopeResponse.self, from: data)
+
+            guard let content = result.choices?.first?.message.content else {
+                print("[AIItemGenerator] AI 返回空内容")
+                return nil
+            }
+
+            // 提取 JSON（处理可能的 markdown 代码块包裹）
+            let jsonString = extractJSON(from: content)
+            guard let jsonData = jsonString.data(using: .utf8) else { return nil }
+
+            let items = try JSONDecoder().decode([AIGeneratedItem].self, from: jsonData)
+            print("[AIItemGenerator] AI 成功生成 \(items.count) 个物品")
+            return items
 
         } catch {
             print("[AIItemGenerator] 调用异常: \(error.localizedDescription)")
             return nil
         }
+    }
+
+    /// 根据危险等级获取稀有度权重
+    private func getRarityWeights(dangerLevel: Int) -> [String: Int] {
+        switch dangerLevel {
+        case 1, 2:
+            return ["common": 70, "uncommon": 25, "rare": 5, "epic": 0, "legendary": 0]
+        case 3:
+            return ["common": 50, "uncommon": 30, "rare": 15, "epic": 5, "legendary": 0]
+        case 4:
+            return ["common": 0, "uncommon": 40, "rare": 35, "epic": 20, "legendary": 5]
+        case 5:
+            return ["common": 0, "uncommon": 0, "rare": 30, "epic": 40, "legendary": 30]
+        default:
+            return ["common": 60, "uncommon": 30, "rare": 10, "epic": 0, "legendary": 0]
+        }
+    }
+
+    /// 提取 AI 返回的 JSON（处理可能的 markdown 代码块包裹）
+    private func extractJSON(from text: String) -> String {
+        // 尝试匹配 ```json ... ``` 或 ``` ... ```
+        let pattern = "```(?:json)?\\s*([\\s\\S]*?)```"
+        if let regex = try? NSRegularExpression(pattern: pattern),
+           let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+           let range = Range(match.range(at: 1), in: text) {
+            return String(text[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Private: 映射逻辑
